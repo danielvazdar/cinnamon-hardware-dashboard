@@ -1,13 +1,19 @@
-// A live line graph drawn with Cairo: newest sample on the right, soft fill under each line.
+// A live line graph drawn with Cairo in the HUD style: cyan grid, newest sample on the right,
+// a soft glow and fill under each line.
 
 const St = imports.gi.St;
 const Cairo = imports.cairo;
 
-const GRID_LINES = 3;
-const LINE_WIDTH = 1.6;
+const GRID_ROWS = 3;
+const GRID_COLUMNS = 10;
+const GRID_RGBA = [0, 0.9, 1, 0.08];
+const LINE_WIDTH = 1.8;
+const GLOW_WIDTH = 6;
+const GLOW_ALPHA = 0.12;
 const FILL_TOP_ALPHA = 0.32;
 const FILL_BOTTOM_ALPHA = 0.02;
 const AUTO_SCALE_HEADROOM = 1.15;
+const CORNER_RADIUS = 8; // matches .hw-graph border-radius in stylesheet.css
 
 function hexToRgb(hex) {
     const value = parseInt(hex.replace('#', ''), 16);
@@ -31,6 +37,7 @@ function scaleTop(series, maximum) {
 function paint(area, series, capacity, maximum) {
     const context = area.get_context();
     const [width, height] = area.get_surface_size();
+    clipToRoundedRectangle(context, width, height, CORNER_RADIUS);
     drawGrid(context, width, height);
     const top = scaleTop(series, maximum);
     const step = width / Math.max(capacity - 1, 1);
@@ -45,13 +52,28 @@ function paint(area, series, capacity, maximum) {
     context.$dispose();
 }
 
+function clipToRoundedRectangle(context, width, height, radius) {
+    context.newPath();
+    context.arc(width - radius, radius, radius, -Math.PI / 2, 0);
+    context.arc(width - radius, height - radius, radius, 0, Math.PI / 2);
+    context.arc(radius, height - radius, radius, Math.PI / 2, Math.PI);
+    context.arc(radius, radius, radius, Math.PI, 1.5 * Math.PI);
+    context.closePath();
+    context.clip();
+}
+
 function drawGrid(context, width, height) {
-    context.setSourceRGBA(1, 1, 1, 0.06);
+    context.setSourceRGBA(...GRID_RGBA);
     context.setLineWidth(1);
-    for (let index = 1; index <= GRID_LINES; index++) {
-        const y = Math.round((height * index) / (GRID_LINES + 1)) + 0.5;
+    for (let index = 1; index <= GRID_ROWS; index++) {
+        const y = Math.round((height * index) / (GRID_ROWS + 1)) + 0.5;
         context.moveTo(0, y);
         context.lineTo(width, y);
+    }
+    for (let index = 1; index < GRID_COLUMNS; index++) {
+        const x = Math.round((width * index) / GRID_COLUMNS) + 0.5;
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
     }
     context.stroke();
 }
@@ -75,10 +97,16 @@ function drawLine(context, points, height, [red, green, blue]) {
     context.fill();
 
     tracePath(context, points);
+    context.setSourceRGBA(red, green, blue, GLOW_ALPHA);
+    context.setLineWidth(GLOW_WIDTH);
+    context.setLineJoin(Cairo.LineJoin.ROUND);
+    context.stroke();
+
+    tracePath(context, points);
     context.setSourceRGBA(red, green, blue, 0.95);
     context.setLineWidth(LINE_WIDTH);
     context.setLineJoin(Cairo.LineJoin.ROUND);
     context.stroke();
 }
 
-module.exports = {makeGraph};
+module.exports = {makeGraph, hexToRgb};

@@ -1,25 +1,42 @@
-// Draws the dashboard: a large panel for the first machine and a card for each other machine.
-// Drawing only; polling and state live in desklet.js. Cinnamon's St.BoxLayout ignores Clutter
-// alignment, so alignment and stretching go through box.add(actor, {...}).
+// Draws the dashboard in a control-room HUD style: a large panel for the first machine and a card
+// for each other machine, each with ring gauges, a load graph and status lights.
+// Drawing only; polling and state live in desklet.js.
+// St quirks: St.BoxLayout ignores Clutter alignment (use box.add(actor, {...})); a `foreground` in
+// label markup is overridden by the CSS colour, so coloured text is its own label with a style colour.
 
 const St = imports.gi.St;
+const GLib = imports.gi.GLib;
 const Pango = imports.gi.Pango;
 const Metrics = require('./metrics');
 const {makeGraph} = require('./graph');
+const {makeGauge, framed} = require('./gauge');
 
-const SERIES_COLORS = {cpu: '#8ab4f8', gpu: '#81c995', down: '#78d9ec', up: '#f28b82'};
-const SEVERITY_COLORS = {ok: '#81c995', warn: '#fdd663', critical: '#f28b82', offline: '#80868b'};
+const COLORS = {accent: '#00e5ff', gpu: '#b388ff', up: '#ffb74d', ok: '#3ddc97', warn: '#ffb300', critical: '#ff5370', offline: '#7d8b99'};
+const SEVERITY_COLORS = {ok: COLORS.accent, warn: COLORS.warn, critical: COLORS.critical};
+const NEVER_WARN = {warn: Infinity, critical: Infinity}; // a busy GPU is not a problem
 const OFFLINE_OPACITY = 110;
-const SERVICES_PER_ROW = 3;
+const LIGHTS_PER_ROW = 3;
+const GRAPH_GAP = 18;
 const CENTERED = {y_fill: false, y_align: St.Align.MIDDLE};
+const CENTERED_X = {x_fill: false, x_align: St.Align.MIDDLE};
 const EXPAND = {expand: true};
 
-function label(text, styleClass, style = '') {
-    const actor = new St.Label({text, style_class: styleClass});
-    if (style) // an empty style string makes St log a parser error
-        actor.set_style(style);
-    actor.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+function escape(text) {
+    return GLib.markup_escape_text(String(text), -1);
+}
+
+// A label from Pango markup. Only long free text (titles, warnings) may be shortened with "…".
+function label(markup, styleClass, {color = null, ellipsize = false} = {}) {
+    const actor = new St.Label({style_class: styleClass});
+    if (color) // never pass an empty style: St logs a parser error for it
+        actor.set_style(`color: ${color};`);
+    actor.clutter_text.set_ellipsize(ellipsize ? Pango.EllipsizeMode.END : Pango.EllipsizeMode.NONE);
+    actor.clutter_text.set_markup(markup);
     return actor;
+}
+
+function caption(text, color = null) {
+    return label(escape(text.toUpperCase()), 'hud-caption', {color});
 }
 
 function row(spacing, children = []) {
@@ -29,64 +46,17 @@ function row(spacing, children = []) {
     return box;
 }
 
-function column(spacing, width = null) {
-    return new St.BoxLayout({vertical: true, style: `spacing: ${spacing}px;${width ? ` width: ${width}px;` : ''}`});
+function column(spacing) {
+    return new St.BoxLayout({vertical: true, style: `spacing: ${spacing}px;`});
 }
 
-function severityColor(severity) {
-    return SEVERITY_COLORS[severity];
+function spacer() {
+    return [new St.Widget(), EXPAND];
 }
 
-function temperatureLabel(value, limits, styleClass) {
-    if (value === null)
-        return label('', styleClass);
-    return label(`${value}°C`, styleClass, `color: ${severityColor(Metrics.severityOf(value, limits))};`);
-}
-
-// A thin progress bar coloured by how worrying the value is.
-function bar(percent, width, limits) {
-    const track = new St.BoxLayout({style_class: 'hw-bar', style: `width: ${width}px;`});
-    const fillWidth = Math.max(2, Math.round((Math.min(percent, 100) / 100) * width));
-    track.add_actor(new St.Widget({style_class: 'hw-bar-fill',
-        style: `width: ${fillWidth}px; background-color: ${severityColor(Metrics.severityOf(percent, limits))};`}));
-    return track;
-}
-
-// "RAM            6.1 / 33.2 GB" over a bar.
-function barRow(name, detail, percent, width, limits) {
-    const box = column(3, width);
-    box.add_actor(row(6, [[label(name, 'hw-caption')], [new St.Widget(), EXPAND], [label(detail, 'hw-detail')]]));
-    box.add_actor(bar(percent, width, limits));
-    return box;
-}
-
-function diskRows(disks, width) {
-    return disks.map(disk => barRow(`Disk ${disk.mount}`,
-        `${Math.round(disk.percent)}% · ${Metrics.formatBytes(disk.sizeBytes - disk.usedBytes)} free`,
-        disk.percent, width, Metrics.LIMITS.diskPercent));
-}
-
-function ramRow(ram, width) {
-    return barRow('RAM', `${Metrics.formatBytes(ram.usedBytes)} / ${Metrics.formatBytes(ram.totalBytes)}`,
-        ram.percent, width, Metrics.LIMITS.ramPercent);
-}
-
-function fansLine(fans) {
-    if (!fans.length)
-        return null;
-    return label(fans.map(fan => `${fan.label} ${fan.rpm} rpm`).join(' · '), 'hw-detail');
-}
-
-function statusPill(host) {
-    if (host.offline)
-        return label(host.lastSeen ? `offline · last seen ${host.lastSeen}` : 'offline', 'hw-pill', `color: ${SEVERITY_COLORS.critical};`);
-    if (!host.snapshot)
-        return label('connecting…', 'hw-pill', `color: ${SEVERITY_COLORS.offline};`);
-    const warnings = host.snapshot.warnings;
-    if (!warnings.length)
-        return label('All good', 'hw-pill', `color: ${SEVERITY_COLORS.ok};`);
-    const severity = Metrics.worstSeverity(warnings.map(w => w.severity));
-    return label(warnings.map(w => w.label).join(' · '), 'hw-pill', `color: ${severityColor(severity)};`);
+// Several pieces of text in a row, each with its own colour: [{text, color}].
+function coloredLine(parts, styleClass, spacing = 8) {
+    return row(spacing, parts.filter(part => part.text).map(part => [label(escape(part.text), styleClass, {color: part.color})]));
 }
 
 function hostSeverity(host) {
@@ -97,158 +67,172 @@ function hostSeverity(host) {
     return Metrics.worstSeverity(host.snapshot.warnings.map(w => w.severity));
 }
 
+function frameColor(host) {
+    if (!host.snapshot && !host.offline)
+        return COLORS.offline;
+    return SEVERITY_COLORS[hostSeverity(host)];
+}
+
+function statusTag(host) {
+    if (host.offline)
+        return label(escape(host.lastSeen ? `OFFLINE · LAST SEEN ${host.lastSeen}` : 'OFFLINE'), 'hud-status', {color: COLORS.critical, ellipsize: true});
+    if (!host.snapshot)
+        return label('CONNECTING', 'hud-status', {color: COLORS.offline});
+    const warnings = host.snapshot.warnings;
+    if (!warnings.length)
+        return label('● NOMINAL', 'hud-status', {color: COLORS.ok});
+    const color = SEVERITY_COLORS[Metrics.worstSeverity(warnings.map(w => w.severity))];
+    return label(escape(`▲ ${warnings.map(w => w.label).join(' · ').toUpperCase()}`), 'hud-status', {color, ellipsize: true});
+}
+
 function header(host, titleClass) {
-    const snapshot = host.snapshot;
-    const dot = new St.Widget({style_class: 'hw-dot',
-        style: `background-color: ${host.offline || !host.snapshot ? SEVERITY_COLORS.offline : severityColor(hostSeverity(host))};`});
-    return row(8, [
-        [dot], [label(host.name, titleClass)], [label(snapshot ? snapshot.system : '', 'hw-detail')],
-        [new St.Widget(), EXPAND], [statusPill(host)],
-        [label(snapshot && snapshot.uptime ? `up ${snapshot.uptime}` : '', 'hw-detail')],
+    const uptime = host.snapshot && host.snapshot.uptime ? `UP ${host.snapshot.uptime.toUpperCase()}` : '';
+    return row(12, [
+        [label('▍', titleClass, {color: frameColor(host)})],
+        [label(escape(host.name.toUpperCase()), titleClass)],
+        spacer(), [statusTag(host)], [caption(uptime)],
     ]);
 }
 
-// Big number with two small lines beside it: "23%  54°C / 14 cores".
-function bigFigure(value, sideTop, sideBottom) {
-    const side = column(0);
-    side.add_actor(sideTop);
-    side.add_actor(sideBottom);
-    return row(10, [[label(`${Math.round(value)}%`, 'hw-big')], [side]]);
+function temperaturePart(value, limits) {
+    if (value === null)
+        return {text: ''};
+    return {text: `${value}°C`, color: SEVERITY_COLORS[Metrics.severityOf(value, limits)]};
 }
 
-function cpuColumn(host, width, graphHeight) {
+// One gauge with its name and a detail line under it. detail: [{text, color}]
+function gaugeBlock({name, percent, limits, detail, size, color = COLORS.accent}) {
+    const severity = Metrics.severityOf(percent, limits);
+    const block = column(3);
+    block.add(makeGauge({size, percent, color: severity === 'ok' ? color : SEVERITY_COLORS[severity],
+        markup: `${Math.round(percent)}<span size="small" fgalpha="60%">%</span>`,
+        valueFontSize: Math.round(size * 0.25)}), CENTERED_X);
+    block.add(caption(name), CENTERED_X);
+    block.add(coloredLine(detail, 'hud-detail', 6), CENTERED_X);
+    return block;
+}
+
+function fullestDisk(disks) {
+    return disks.reduce((fullest, disk) => (!fullest || disk.percent > fullest.percent ? disk : fullest), null);
+}
+
+function gaugeRow(snapshot, size) {
+    const disk = fullestDisk(snapshot.disks);
+    const gpu = snapshot.gpu;
+    const gauges = [
+        gaugeBlock({name: 'cpu', percent: snapshot.cpuPercent, limits: Metrics.LIMITS.cpuPercent, size,
+            detail: [temperaturePart(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature)]}),
+        gpu && gaugeBlock({name: 'gpu', percent: gpu.percent, limits: NEVER_WARN, size, color: COLORS.gpu,
+            detail: [temperaturePart(gpu.temperature, Metrics.LIMITS.gpuTemperature),
+                {text: gpu.fanPercent !== null ? `fan ${gpu.fanPercent}%` : ''}]}),
+        gaugeBlock({name: 'ram', percent: snapshot.ram.percent, limits: Metrics.LIMITS.ramPercent, size,
+            detail: [{text: `${(snapshot.ram.usedBytes / 1e9).toFixed(1)}/${Metrics.formatBytes(snapshot.ram.totalBytes)}`}]}),
+        disk && gaugeBlock({name: `disk ${disk.mount}`, percent: disk.percent, limits: Metrics.LIMITS.diskPercent, size,
+            detail: [{text: `${Metrics.formatBytes(disk.sizeBytes - disk.usedBytes)} free`},
+                temperaturePart(snapshot.nvmeTemperature, Metrics.LIMITS.cpuTemperature)]}),
+    ].filter(Boolean);
+    return row(0, gauges.map(gauge => [gauge, {expand: true, x_fill: false, x_align: St.Align.MIDDLE, y_fill: false}]));
+}
+
+function legend(name, color) {
+    return row(6, [[label('■', 'hud-caption', {color})], [caption(name)]]);
+}
+
+// "LOAD · 10 MIN   ■ CPU ■ GPU      ↓ 1.2 MB/s ↑ 80 KB/s" over a CPU/GPU graph.
+function loadStrip(host, width, graphHeight) {
     const snapshot = host.snapshot;
-    const box = column(6, width);
-    box.add_actor(label('CPU', 'hw-caption'));
-    box.add_actor(bigFigure(snapshot.cpuPercent,
-        temperatureLabel(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature, 'hw-temp'),
-        label(`${snapshot.cpuCores} cores`, 'hw-detail')));
-    box.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100,
-        series: [{samples: host.history.cpu, color: SERIES_COLORS.cpu}]}));
-    return box;
-}
-
-function gpuColumn(host, width, graphHeight) {
-    const gpu = host.snapshot.gpu;
-    const box = column(6, width);
-    box.add_actor(label(`GPU · ${gpu.name}`, 'hw-caption'));
-    box.add_actor(bigFigure(gpu.percent,
-        temperatureLabel(gpu.temperature, Metrics.LIMITS.gpuTemperature, 'hw-temp'),
-        label(`fan ${gpu.fanPercent}% · VRAM ${Math.round(gpu.memoryPercent)}%`, 'hw-detail')));
-    box.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100,
-        series: [{samples: host.history.gpu, color: SERIES_COLORS.gpu}]}));
-    return box;
-}
-
-function networkBlock(host, width, graphHeight) {
-    const {down, up} = host.snapshot.network;
-    const box = column(4, width);
-    box.add_actor(row(6, [[label('Network', 'hw-caption')], [new St.Widget(), EXPAND],
-        [label(`↓ ${Metrics.formatBytes(down, '/s')}`, 'hw-detail', `color: ${SERIES_COLORS.down};`)],
-        [label(`↑ ${Metrics.formatBytes(up, '/s')}`, 'hw-detail', `color: ${SERIES_COLORS.up};`)]]));
-    box.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity,
-        series: [{samples: host.history.down, color: SERIES_COLORS.down}, {samples: host.history.up, color: SERIES_COLORS.up}]}));
-    return box;
-}
-
-function systemColumn(host, width, graphHeight) {
-    const snapshot = host.snapshot;
-    const box = column(8, width);
-    box.add_actor(ramRow(snapshot.ram, width));
-    for (const diskRow of diskRows(snapshot.disks, width))
-        box.add_actor(diskRow);
-    const extras = [snapshot.nvmeTemperature !== null ? `SSD ${snapshot.nvmeTemperature}°C` : null,
-        ...snapshot.fans.map(fan => `${fan.label} ${fan.rpm} rpm`)].filter(Boolean);
-    if (extras.length)
-        box.add_actor(label(extras.join(' · '), 'hw-detail'));
-    box.add(new St.Widget(), EXPAND);
-    box.add_actor(networkBlock(host, width, graphHeight));
-    return box;
-}
-
-function servicesBlock(services) {
-    const box = column(4);
-    for (let index = 0; index < services.length; index += SERVICES_PER_ROW) {
-        const chips = services.slice(index, index + SERVICES_PER_ROW).map(service => {
-            if (service.kind === 'counter')
-                return [label(`${service.name} ${service.count}`, 'hw-chip hw-chip-counter')];
-            const color = service.up ? SEVERITY_COLORS.ok : SEVERITY_COLORS.critical;
-            return [label(`● ${service.name}`, 'hw-chip', `color: ${color};`)];
-        });
-        box.add_actor(row(6, chips));
+    const series = [{samples: host.history.cpu, color: COLORS.accent}];
+    const legends = [[legend('cpu', COLORS.accent)]];
+    if (snapshot.gpu) {
+        series.push({samples: host.history.gpu, color: COLORS.gpu});
+        legends.push([legend('gpu', COLORS.gpu)]);
     }
+    const strip = column(6);
+    strip.add_actor(row(14, [[caption('load · 10 min')], ...legends, spacer(), [networkRates(snapshot.network)]]));
+    strip.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100, series}));
+    return strip;
+}
+
+function networkRates(network) {
+    return coloredLine([
+        {text: `↓ ${Metrics.formatBytes(network.down, '/s')}`, color: COLORS.accent},
+        {text: `↑ ${Metrics.formatBytes(network.up, '/s')}`, color: COLORS.up},
+    ], 'hud-detail', 14);
+}
+
+// One graph with its own caption line: "CPU ............ 10 MIN".
+function graphColumn({name, rightSide, width, graphHeight, capacity, maximum, series}) {
+    const box = column(6);
+    box.add_actor(row(10, [[caption(name)], spacer(), [rightSide]]));
+    box.add_actor(makeGraph({width, height: graphHeight, capacity, maximum, series}));
     return box;
 }
 
-function offlineBody(host) {
-    return label(host.error ? `No answer: ${host.error}` : 'Waiting for the first answer…', 'hw-detail');
+// The big panel's graphs side by side: CPU, GPU (if any) and network, each on its own scale.
+function splitGraphs(host, width, graphHeight, gap) {
+    const {snapshot, history, capacity} = host;
+    const graphs = [
+        {name: 'cpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
+        snapshot.gpu && {name: 'gpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
+        {name: 'network', rightSide: networkRates(snapshot.network), maximum: null,
+            series: [{samples: history.down, color: COLORS.accent}, {samples: history.up, color: COLORS.up}]},
+    ].filter(Boolean);
+    const columnWidth = Math.floor((width - gap * (graphs.length - 1)) / graphs.length);
+    return row(gap, graphs.map(graph => [graphColumn({...graph, width: columnWidth, graphHeight, capacity})]));
 }
 
-// sizes: {width, height, gap, graphHeight}
-function buildMainPanel(host, sizes) {
-    const panel = new St.BoxLayout({vertical: true, style_class: `hw-panel is-${hostSeverity(host)}`,
-        style: `width: ${sizes.width}px; height: ${sizes.height}px; spacing: 10px;`});
-    panel.add_actor(header(host, 'hw-title'));
-    if (!host.snapshot) {
-        panel.add_actor(offlineBody(host));
-        return panel;
-    }
-    const columnWidth = Math.floor((sizes.width - 2 * sizes.gap) / 3);
-    const columns = row(sizes.gap);
-    columns.add(cpuColumn(host, columnWidth, sizes.graphHeight), {y_fill: true});
-    if (host.snapshot.gpu)
-        columns.add(gpuColumn(host, columnWidth, sizes.graphHeight), {y_fill: true});
-    columns.add(systemColumn(host, columnWidth, Math.round(sizes.graphHeight * 0.45)), {y_fill: true});
-    panel.add(columns, EXPAND);
+function statusLight(service) {
+    if (service.kind === 'counter')
+        return coloredLine([{text: service.name.toUpperCase()}, {text: String(service.count), color: COLORS.accent}], 'hud-detail', 6);
+    return row(6, [[label('●', 'hud-detail', {color: service.up ? COLORS.ok : COLORS.critical})],
+        [label(escape(service.name.toUpperCase()), 'hud-detail')]]);
+}
+
+function statusLights(services, fans) {
+    const lights = [
+        ...services.map(statusLight),
+        ...fans.map(fan => coloredLine([{text: fan.label.toUpperCase()}, {text: `${fan.rpm} rpm`, color: COLORS.accent}], 'hud-detail', 6)),
+    ];
+    const box = column(6);
+    for (let index = 0; index < lights.length; index += LIGHTS_PER_ROW)
+        box.add_actor(row(20, lights.slice(index, index + LIGHTS_PER_ROW).map(light => [light])));
+    return box;
+}
+
+function waitingBody(host) {
+    return label(escape(host.error ? `no answer: ${host.error}` : 'waiting for the first answer'), 'hud-detail', {ellipsize: true});
+}
+
+// The panel body shared by the big panel (graphs side by side) and the cards (one combined graph).
+function hostBody(host, sizes, {withLights, splitLoad}) {
+    const body = column(sizes.spacing);
+    body.add_actor(gaugeRow(host.snapshot, sizes.gaugeSize));
+    body.add_actor(splitLoad
+        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP)
+        : loadStrip(host, sizes.innerWidth, sizes.graphHeight));
+    if (withLights)
+        body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans));
     if (host.offline)
-        columns.opacity = OFFLINE_OPACITY;
-    return panel;
+        body.opacity = OFFLINE_OPACITY;
+    return body;
 }
 
-function cardTopRow(host, width, graphHeight) {
-    const snapshot = host.snapshot;
-    const figureWidth = Math.round(width * 0.36);
-    const figure = column(0, figureWidth);
-    figure.add_actor(label('CPU', 'hw-caption'));
-    figure.add_actor(bigFigure(snapshot.cpuPercent,
-        temperatureLabel(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature, 'hw-temp'),
-        label(`${snapshot.cpuCores} cores`, 'hw-detail')));
-    const series = [{samples: host.history.cpu, color: SERIES_COLORS.cpu}];
-    if (snapshot.gpu)
-        series.push({samples: host.history.gpu, color: SERIES_COLORS.gpu});
-    const graph = makeGraph({width: width - figureWidth - 10, height: graphHeight, capacity: host.capacity, maximum: 100, series});
-    return row(10, [[figure], [graph]]);
+function buildPanel(host, sizes, {styleClass, titleClass, withLights, splitLoad}) {
+    const panel = new St.BoxLayout({vertical: true, style_class: `hud-panel ${styleClass} is-${hostSeverity(host)}`,
+        style: `spacing: ${sizes.spacing}px;`});
+    panel.add_actor(header(host, titleClass));
+    panel.add(host.snapshot ? hostBody(host, sizes, {withLights, splitLoad}) : waitingBody(host), EXPAND);
+    return framed(panel, {width: sizes.width, height: sizes.height, color: frameColor(host)});
+}
+
+// sizes: {width, height (outer), innerWidth, spacing, gaugeSize, graphHeight}
+function buildMainPanel(host, sizes) {
+    const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length));
+    return buildPanel(host, sizes, {styleClass: 'hud-main', titleClass: 'hud-title', withLights: hasLights, splitLoad: true});
 }
 
 function buildCard(host, sizes) {
-    const card = new St.BoxLayout({vertical: true, style_class: `hw-card is-${hostSeverity(host)}`,
-        style: `width: ${sizes.width}px; height: ${sizes.height}px; spacing: 8px;`});
-    card.add_actor(header(host, 'hw-card-title'));
-    if (!host.snapshot) {
-        card.add_actor(offlineBody(host));
-        return card;
-    }
-    const body = column(8);
-    const snapshot = host.snapshot;
-    body.add_actor(cardTopRow(host, sizes.width, sizes.graphHeight));
-    body.add_actor(ramRow(snapshot.ram, sizes.width));
-    if (snapshot.gpu) {
-        body.add_actor(row(8, [[label(`GPU · ${snapshot.gpu.name}`, 'hw-caption')], [new St.Widget(), EXPAND],
-            [label(`${Math.round(snapshot.gpu.percent)}%`, 'hw-detail')],
-            [temperatureLabel(snapshot.gpu.temperature, Metrics.LIMITS.gpuTemperature, 'hw-detail')],
-            [label(`fan ${snapshot.gpu.fanPercent}%`, 'hw-detail')]]));
-    }
-    for (const diskRow of diskRows(snapshot.disks, sizes.width))
-        body.add_actor(diskRow);
-    const fans = fansLine(snapshot.fans);
-    if (fans)
-        body.add_actor(fans);
-    if (snapshot.services.length)
-        body.add_actor(servicesBlock(snapshot.services));
-    if (host.offline)
-        body.opacity = OFFLINE_OPACITY;
-    card.add(body, EXPAND);
-    return card;
+    return buildPanel(host, sizes, {styleClass: 'hud-card', titleClass: 'hud-card-title', withLights: true, splitLoad: false});
 }
 
 module.exports = {buildMainPanel, buildCard};

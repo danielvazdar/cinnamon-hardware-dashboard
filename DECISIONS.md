@@ -10,3 +10,7 @@
 | 2026-11-26 | Warn/critical limits as constants in metrics.js, not settings | One owner, sane defaults; add settings when someone needs different limits |
 | 2026-11-26 | Rebuild the view each poll (2 s) instead of updating widgets in place | Measured ~4% of one core on a 14-core PC; simpler code wins until that matters |
 | 2026-11-26 | Public repo, MIT; machine names, addresses and service checks stay in git-ignored `hosts/` | Owner asked for public with nothing personal |
+| 2026-11-26 | Control-room HUD look (owner's pick over glass+rings and polish): ring gauges, corner brackets, JetBrains Mono, one load graph per machine | First version read as plain, hard to read and messy |
+| 2026-11-26 | "Text size" setting (default 15 px); gauges take the height left after text | Theme default text was too small to read across the room |
+| 2026-11-26 | Big panel: CPU, GPU and network graphs side by side, each on its own scale; cards keep one combined graph | Owner: one graph with three things in it was hard to read |
+| 2026-11-26 | Rounded corners (frame 22 px, panels 14 px, graphs 8 px) with curved corner accents | Owner prefers rounded, like the calendar, over sharp HUD brackets |
