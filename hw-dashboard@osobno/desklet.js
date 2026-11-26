@@ -13,8 +13,6 @@ const Metrics = require('./metrics');
 const Views = require('./views');
 
 const UUID = 'hw-dashboard@osobno';
-const FAST_PLUGINS = ['cpu', 'mem', 'gpu', 'network', 'sensors'];
-const SLOW_PLUGINS = ['fs', 'uptime', 'amps', 'system'];
 const SLOW_EVERY_TICKS = 8;
 const FAILURES_BEFORE_OFFLINE = 2;
 const REQUEST_TIMEOUT_SECONDS = 4;
@@ -155,8 +153,8 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
     async _pollHost(host, withSlow) {
         try {
             const slowAnswers = withSlow || !host.snapshot
-                ? {...host.slowAnswers, ...await this._fetchPlugins(host, SLOW_PLUGINS)} : host.slowAnswers;
-            const fast = await this._fetchPlugins(host, FAST_PLUGINS);
+                ? {...host.slowAnswers, ...await this._fetchPlugins(host, Metrics.PLUGINS.slow)} : host.slowAnswers;
+            const fast = await this._fetchPlugins(host, Metrics.PLUGINS.fast);
             const snapshot = Metrics.snapshotFrom({...slowAnswers, ...fast});
             const history = host.history.cpu.length ? host.history : await this._loadHistory(host).catch(error => {
                 global.logWarning(`${UUID}: ${host.name}: no history to start the graphs with: ${error.message}`);

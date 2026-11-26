@@ -148,3 +148,9 @@ test('Glances sampling interval comes from the history timestamps', () => {
     assert.equal(metrics.samplingSeconds([['2026-11-26T20:55:05.4+00:00', 1], ['2026-11-26T20:55:07.4+00:00', 2]]), 2);
     assert.equal(metrics.samplingSeconds([]), 2);
 });
+
+test('the process list is refreshed whenever service and runner checks are read', () => {
+    // Glances only refreshes what is asked for; without processcount the checks freeze at their first count.
+    assert.ok(metrics.PLUGINS.slow.includes('amps'));
+    assert.ok(metrics.PLUGINS.slow.includes('processcount') || metrics.PLUGINS.fast.includes('processcount'));
+});

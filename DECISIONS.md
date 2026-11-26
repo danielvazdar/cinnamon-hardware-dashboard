@@ -18,3 +18,4 @@
 | 2026-11-26 | A machine with exactly one fan shows it under the CPU gauge | Frees a line in the card for the runner list |
 | 2026-11-26 | Disk warnings by free space (warn < 10 GB, critical < 5 GB), not percent | Owner: the PC's Linux partition is 95% full by design (Windows has the rest of the disk), 25 GB free is plenty |
 | 2026-11-26 | Graphs show 30 minutes and start full from Glances' own history (`/api/4/<plugin>/history`, CPU = user + system) | Owner saw only a sliver of line: in-memory history restarted on every reload and 10 min scrolled by fast |
+| 2026-11-26 | Always request `processcount` together with `amps` | Glances only refreshes what is asked for; without it every service/runner check froze at its first count (runner list showed finished jobs, a dead service would never turn red) |

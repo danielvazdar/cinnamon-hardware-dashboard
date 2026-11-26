@@ -17,6 +17,15 @@ const NVME_LABEL = /^composite$/i;
 const VIRTUAL_INTERFACE = /^(lo|tailscale|docker|br-|veth|virbr|wg|zt|tun|tap)/;
 const PSEUDO_FILESYSTEMS = new Set(['squashfs', 'tmpfs', 'devtmpfs', 'overlay', 'vfat', 'efivarfs']);
 const HISTORY_SAMPLES = 300;
+
+// What the desklet asks Glances for: fast every poll, slow every few polls.
+// Glances only refreshes what is asked for. Its process list (behind the service and runner checks,
+// "amps") is refreshed by the processcount plugin, so asking for amps without processcount freezes
+// every check at its first count.
+const PLUGINS = {
+    fast: ['cpu', 'mem', 'gpu', 'network', 'sensors'],
+    slow: ['processcount', 'amps', 'fs', 'uptime', 'system'],
+};
 const DRIVER_NAMED_SENSOR = /^[a-z0-9_]+ \d+$/; // e.g. "dell_smm 0": the same fan again, under the driver's name
 
 function severityOf(value, limits) {
@@ -240,5 +249,5 @@ function appendSample(samples, value, capacity = HISTORY_SAMPLES) {
     return next.length > capacity ? next.slice(next.length - capacity) : next;
 }
 
-module.exports = {LIMITS, severityOf, diskSeverity, tightestDisk, worstSeverity, cpuTemperature, nvmeTemperature, fans, gpu, disks,
+module.exports = {PLUGINS, LIMITS, severityOf, diskSeverity, tightestDisk, worstSeverity, cpuTemperature, nvmeTemperature, fans, gpu, disks,
     networkRates, services, historyFromGlances, samplingSeconds, uptimeSeconds, formatUptime, formatBytes, warnings, snapshotFrom, appendSample};
