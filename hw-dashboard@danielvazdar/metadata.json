@@ -1,5 +1,5 @@
 {
-    "uuid": "hw-dashboard@osobno",
+    "uuid": "hw-dashboard@danielvazdar",
     "name": "Hardware Dashboard",
     "description": "Live CPU, GPU, temperatures, memory, disks, network and services for this PC and your servers, from Glances",
     "prevent-decorations": true,

@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: "22"
       - run: node --test tests/*.test.js
-      - run: for f in hw-dashboard@osobno/*.js; do node --check "$f"; done
+      - run: for f in hw-dashboard@danielvazdar/*.js; do node --check "$f"; done
       - run: shellcheck install.sh agent/install.sh
       - uses: gitleaks/gitleaks-action@v2
         env:

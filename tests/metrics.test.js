@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const metrics = require('../hw-dashboard@osobno/metrics.js');
+const metrics = require('../hw-dashboard@danielvazdar/metrics.js');
 
 const temp = (label, value) => ({label, value, type: 'temperature_core', unit: 'C'});
 
