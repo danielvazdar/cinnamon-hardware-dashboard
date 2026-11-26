@@ -7,18 +7,18 @@ service checks live in `hosts/` (git-ignored). **Deployment notes: `hosts/NOTES.
 ## Map
 | Path | What |
 |---|---|
-| `hw-dashboard@osobno/desklet.js` | settings, polling Glances over HTTP (Soup 3), host state, render |
-| `hw-dashboard@osobno/metrics.js` | pure: Glances JSON → snapshot, limits, warnings, history; tested with Node |
-| `hw-dashboard@osobno/views.js` | St widgets: big panel (first machine) and cards (others) |
-| `hw-dashboard@osobno/graph.js` | Cairo line graphs (HUD grid + glow) |
-| `hw-dashboard@osobno/gauge.js` | Cairo ring gauges and corner-bracket frames |
+| `hw-dashboard@danielvazdar/desklet.js` | settings, polling Glances over HTTP (Soup 3), host state, render |
+| `hw-dashboard@danielvazdar/metrics.js` | pure: Glances JSON → snapshot, limits, warnings, history; tested with Node |
+| `hw-dashboard@danielvazdar/views.js` | St widgets: big panel (first machine) and cards (others) |
+| `hw-dashboard@danielvazdar/graph.js` | Cairo line graphs (HUD grid + glow) |
+| `hw-dashboard@danielvazdar/gauge.js` | Cairo ring gauges and corner-bracket frames |
 | `agent/install.sh` | installs pinned Glances in `agent/.venv` as user service `glances-dashboard` (linger, no sudo) |
 | `agent/glances.conf` | default Glances config; copy to `hosts/<machine>.conf` for service checks (AMPs) |
 | `install.sh` | symlinks the desklet into `~/.local/share/cinnamon/desklets/` |
 
 ## Commands
 - Tests: `node --test tests/*.test.js && shellcheck install.sh agent/install.sh`
-- Reload: `gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet 'hw-dashboard@osobno' 'DESKLET'`
+- Reload: `gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet 'hw-dashboard@danielvazdar' 'DESKLET'`
 - Glances on a machine: `systemctl --user status glances-dashboard`; API `curl http://<bind>:61208/api/4/cpu`
 - Logs: `~/.xsession-errors` (grep `hw-dashboard`, `St-CRITICAL`)
 - After editing `stylesheet.css`: ReloadXlet is NOT enough (St keeps the parsed sheet). Run Eval

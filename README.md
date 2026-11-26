@@ -75,7 +75,7 @@ Run `agent/install.sh` again with `--config hosts/<machine>.conf` after a change
 ```sh
 node --test tests/*.test.js
 gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon \
-  --method org.Cinnamon.ReloadXlet 'hw-dashboard@osobno' 'DESKLET'
+  --method org.Cinnamon.ReloadXlet 'hw-dashboard@danielvazdar' 'DESKLET'
 ```
 
 `metrics.js` (turning Glances answers into numbers and warnings) is plain JavaScript, tested with Node.

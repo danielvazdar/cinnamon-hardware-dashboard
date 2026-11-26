@@ -12,7 +12,7 @@ const Soup = imports.gi.Soup;
 const Metrics = require('./metrics');
 const Views = require('./views');
 
-const UUID = 'hw-dashboard@osobno';
+const UUID = 'hw-dashboard@danielvazdar';
 const SLOW_EVERY_TICKS = 8;
 const FAILURES_BEFORE_OFFLINE = 2;
 const REQUEST_TIMEOUT_SECONDS = 4;
