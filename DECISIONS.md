@@ -20,3 +20,4 @@
 | 2026-11-26 | Graphs show 30 minutes and start full from Glances' own history (`/api/4/<plugin>/history`, CPU = user + system) | Owner saw only a sliver of line: in-memory history restarted on every reload and 10 min scrolled by fast |
 | 2026-11-26 | Always request `processcount` together with `amps` | Glances only refreshes what is asked for; without it every service/runner check froze at its first count (runner list showed finished jobs, a dead service would never turn red) |
 | 2026-11-26 | Desklet ID `hw-dashboard@danielvazdar` (was `@osobno`) | The suffix is the author by Cinnamon convention; "osobno" meant nothing outside the owner's folder names |
+| 2026-11-26 | Right-click menu opens at the mouse, clamped to the monitor (overrides the menu's `_calculatePosition`) | Cinnamon only checks for room on the right, then flips left without clamping: a full-width desklet pushed its menu off-screen |
