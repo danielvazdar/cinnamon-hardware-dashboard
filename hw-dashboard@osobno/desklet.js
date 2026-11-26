@@ -19,9 +19,14 @@ const FAILURES_BEFORE_OFFLINE = 2;
 const REQUEST_TIMEOUT_SECONDS = 4;
 const OUTER_PADDING = 18;
 const ROOT_BORDER = 1;
-const PANEL_INSET = 15; // panel/card padding 14 + border 1, see stylesheet.css
+const PANEL_INSET = 17; // .hud-panel padding 16 + border 1, see stylesheet.css
 const GAP = 12;
-const MAIN_PANEL_SHARE = 0.52;
+const MAIN_PANEL_SHARE = 0.5;
+const TEXT_LINE_FACTOR = 1.45;
+const HEADER_LINE_FACTOR = 2.0;
+const LIGHT_ROWS_RESERVED = 2;
+const MAIN_GRAPH_HEIGHT = 64;
+const CARD_GRAPH_HEIGHT = 40;
 const HISTORY_SECONDS = 600;
 
 function nowClock() {
@@ -42,6 +47,7 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
         this.settings.bind('width', 'widthPx', () => this._render());
         this.settings.bind('height', 'heightPx', () => this._render());
         this.settings.bind('glass-opacity', 'glassOpacity', () => this._render());
+        this.settings.bind('font-size', 'fontSizePx', () => this._render());
         this.settings.bind('hosts', 'hostList', () => this._resetHosts());
         this.settings.bind('refresh-seconds', 'refreshSeconds', () => this._startTimer());
 
@@ -144,29 +150,40 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
 
     // ------------------------------------------------------------ drawing
 
+    // Outer and inner sizes for the big panel and the cards. Text lines are sized from the font size;
+    // the gauges get whatever height is left, so bigger text means smaller gauges, never overflow.
     _sizes() {
+        const fontSize = this.fontSizePx;
         const contentWidth = this.widthPx - 2 * (OUTER_PADDING + ROOT_BORDER);
         const contentHeight = this.heightPx - 2 * (OUTER_PADDING + ROOT_BORDER);
-        const mainOuterHeight = Math.round(contentHeight * MAIN_PANEL_SHARE);
+        const mainHeight = Math.round(contentHeight * MAIN_PANEL_SHARE);
         const cardCount = Math.max(1, this._hosts.length - 1);
-        const cardOuterWidth = Math.floor((contentWidth - GAP * (cardCount - 1)) / cardCount);
-        const cardOuterHeight = contentHeight - mainOuterHeight - GAP;
-        return {
-            contentWidth, contentHeight,
-            main: {width: contentWidth - 2 * PANEL_INSET, height: mainOuterHeight - 2 * PANEL_INSET, gap: GAP + 8,
-                graphHeight: Math.round((mainOuterHeight - 2 * PANEL_INSET) * 0.5)},
-            card: {width: cardOuterWidth - 2 * PANEL_INSET, height: cardOuterHeight - 2 * PANEL_INSET,
-                graphHeight: Math.round((cardOuterHeight - 2 * PANEL_INSET) * 0.24)},
-        };
+        const cardWidth = Math.floor((contentWidth - GAP * (cardCount - 1)) / cardCount);
+        const cardHeight = contentHeight - mainHeight - GAP;
+        const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+        const line = Math.round(fontSize * TEXT_LINE_FACTOR);
+        const header = Math.round(fontSize * HEADER_LINE_FACTOR);
+        const underGauge = 2 * line + 6;
+        const stripHeader = line + 6;
+        const lights = LIGHT_ROWS_RESERVED * (line + 6);
+        const main = {width: contentWidth, height: mainHeight, innerWidth: contentWidth - 2 * PANEL_INSET, spacing: 12,
+            graphHeight: MAIN_GRAPH_HEIGHT};
+        const card = {width: cardWidth, height: cardHeight, innerWidth: cardWidth - 2 * PANEL_INSET, spacing: 10,
+            graphHeight: CARD_GRAPH_HEIGHT};
+        main.gaugeSize = clamp(mainHeight - 2 * PANEL_INSET - header - 2 * main.spacing - underGauge - stripHeader
+            - main.graphHeight, 60, 150);
+        card.gaugeSize = clamp(cardHeight - 2 * PANEL_INSET - header - 3 * card.spacing - underGauge - stripHeader
+            - card.graphHeight - lights, 50, 120);
+        return {contentWidth, contentHeight, main, card};
     }
 
     _render() {
         const sizes = this._sizes();
         const alpha = this.glassOpacity;
-        this._root.set_style(`width: ${sizes.contentWidth}px; height: ${sizes.contentHeight}px;`
+        this._root.set_style(`width: ${sizes.contentWidth}px; height: ${sizes.contentHeight}px; font-size: ${this.fontSizePx}px;`
             + ` padding: ${OUTER_PADDING}px; spacing: ${GAP}px;`
-            + ` background-gradient-start: rgba(34, 38, 52, ${alpha});`
-            + ` background-gradient-end: rgba(12, 14, 20, ${Math.min(alpha + 0.12, 1)});`);
+            + ` background-gradient-start: rgba(6, 14, 24, ${alpha});`
+            + ` background-gradient-end: rgba(2, 5, 10, ${Math.min(alpha + 0.1, 1)});`);
         this._root.destroy_all_children();
         if (!this._hosts.length) {
             this._root.add_actor(new St.Label({text: 'Add a machine in this desklet\'s settings.', style_class: 'hw-detail'}));

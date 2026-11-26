@@ -1,45 +1,28 @@
-/* Dark glass, matching the calendar desklet. Panel/card padding + border = PANEL_INSET in desklet.js. */
+/* Control-room HUD. The root font size comes from the "Text size" setting; everything here is relative.
+   Sizes that affect layout maths: .hud-panel padding + border = PANEL_INSET in desklet.js. */
 
 .hw-root {
-    border-radius: 22px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    font-family: "JetBrains Mono", monospace;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 229, 255, 0.22);
     background-gradient-direction: vertical;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-    color: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+    color: #e6f7ff;
 }
 
-.hw-panel, .hw-card {
-    padding: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    background-color: rgba(255, 255, 255, 0.045);
+.hud-panel {
+    padding: 16px;
+    border: 1px solid rgba(0, 229, 255, 0.10);
+    background-color: rgba(0, 229, 255, 0.025);
 }
-.hw-panel.is-warn, .hw-card.is-warn { border-color: rgba(253, 214, 99, 0.55); }
-.hw-panel.is-critical, .hw-card.is-critical {
-    border-color: rgba(242, 139, 130, 0.70);
-    background-color: rgba(242, 139, 130, 0.07);
-}
+.hud-panel.is-warn { border-color: rgba(255, 179, 0, 0.35); background-color: rgba(255, 179, 0, 0.03); }
+.hud-panel.is-critical { border-color: rgba(255, 83, 112, 0.40); background-color: rgba(255, 83, 112, 0.045); }
 
-.hw-title { font-size: 1.45em; font-weight: 700; color: #ffffff; }
-.hw-card-title { font-size: 1.2em; font-weight: 700; color: #ffffff; }
-.hw-dot { width: 10px; height: 10px; border-radius: 5px; }
-.hw-pill { font-size: 0.9em; font-weight: 600; }
+.hud-title { font-size: 1.4em; font-weight: 800; color: #ffffff; }
+.hud-card-title { font-size: 1.2em; font-weight: 800; color: #ffffff; }
+.hud-status { font-size: 0.9em; font-weight: 700; }
+.hud-caption { font-size: 0.85em; font-weight: 700; color: #8fd3e6; }
+.hud-detail { font-size: 0.95em; color: #e6f7ff; }
+.hud-gauge-value { font-weight: 800; color: #ffffff; }
 
-.hw-caption { font-size: 0.8em; font-weight: 700; color: rgba(255, 255, 255, 0.55); }
-.hw-detail { font-size: 0.9em; color: rgba(255, 255, 255, 0.70); }
-.hw-big { font-size: 2.3em; font-weight: 700; color: #ffffff; }
-.hw-temp { font-size: 1.05em; font-weight: 700; }
-
-.hw-bar { height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.10); }
-.hw-bar-fill { height: 6px; border-radius: 3px; }
-
-.hw-graph { border-radius: 8px; background-color: rgba(0, 0, 0, 0.18); }
-
-.hw-chip {
-    font-size: 0.88em;
-    font-weight: 600;
-    padding: 2px 9px;
-    border-radius: 999px;
-    background-color: rgba(255, 255, 255, 0.07);
-}
-.hw-chip-counter { color: rgba(255, 255, 255, 0.85); }
+.hw-graph { background-color: rgba(0, 20, 30, 0.40); }

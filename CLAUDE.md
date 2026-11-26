@@ -10,7 +10,8 @@ service checks live in `hosts/` (git-ignored). **Deployment notes: `hosts/NOTES.
 | `hw-dashboard@osobno/desklet.js` | settings, polling Glances over HTTP (Soup 3), host state, render |
 | `hw-dashboard@osobno/metrics.js` | pure: Glances JSON → snapshot, limits, warnings, history; tested with Node |
 | `hw-dashboard@osobno/views.js` | St widgets: big panel (first machine) and cards (others) |
-| `hw-dashboard@osobno/graph.js` | Cairo line graphs |
+| `hw-dashboard@osobno/graph.js` | Cairo line graphs (HUD grid + glow) |
+| `hw-dashboard@osobno/gauge.js` | Cairo ring gauges and corner-bracket frames |
 | `agent/install.sh` | installs pinned Glances in `agent/.venv` as user service `glances-dashboard` (linger, no sudo) |
 | `agent/glances.conf` | default Glances config; copy to `hosts/<machine>.conf` for service checks (AMPs) |
 | `install.sh` | symlinks the desklet into `~/.local/share/cinnamon/desklets/` |
@@ -24,6 +25,8 @@ service checks live in `hosts/` (git-ignored). **Deployment notes: `hosts/NOTES.
 ## Hard constraints
 - Same St quirks as the calendar desklet (content-box sizes, no CSS opacity, `box.add(actor, props)`
   for alignment). Never pass `style: ''` to an St widget: it logs a parser error every render.
+- A `foreground` span in label markup is overridden by the CSS colour: coloured text = its own label
+  with a style colour. Pango `letter_spacing` breaks ClutterText's width → labels get cut; don't use it.
 - Glances has no auth here: bind to 127.0.0.1 or a private VPN address only.
 - Keep `GLANCES_VERSION` pinned in `agent/install.sh`; the API shape is version 4.
 - Decisions → `DECISIONS.md`.
