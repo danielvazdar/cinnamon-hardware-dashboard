@@ -138,7 +138,7 @@ function legend(name, color) {
 }
 
 // "LOAD · 10 MIN   ■ CPU ■ GPU      ↓ 1.2 MB/s ↑ 80 KB/s" over a CPU/GPU graph.
-function loadStrip(host, width, graphHeight) {
+function loadStrip(host, width, graphHeight, historyLabel) {
     const snapshot = host.snapshot;
     const series = [{samples: host.history.cpu, color: COLORS.accent}];
     const legends = [[legend('cpu', COLORS.accent)]];
@@ -147,7 +147,7 @@ function loadStrip(host, width, graphHeight) {
         legends.push([legend('gpu', COLORS.gpu)]);
     }
     const strip = column(6);
-    strip.add_actor(row(14, [[caption('load · 10 min')], ...legends, spacer(), [networkRates(snapshot.network)]]));
+    strip.add_actor(row(14, [[caption(`load · ${historyLabel}`)], ...legends, spacer(), [networkRates(snapshot.network)]]));
     strip.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100, series}));
     return strip;
 }
@@ -168,11 +168,11 @@ function graphColumn({name, rightSide, width, graphHeight, capacity, maximum, se
 }
 
 // The big panel's graphs side by side: CPU, GPU (if any) and network, each on its own scale.
-function splitGraphs(host, width, graphHeight, gap) {
+function splitGraphs(host, width, graphHeight, gap, historyLabel) {
     const {snapshot, history, capacity} = host;
     const graphs = [
-        {name: 'cpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
-        snapshot.gpu && {name: 'gpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
+        {name: 'cpu', rightSide: caption(historyLabel), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
+        snapshot.gpu && {name: 'gpu', rightSide: caption(historyLabel), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
         {name: 'network', rightSide: networkRates(snapshot.network), maximum: null,
             series: [{samples: history.down, color: COLORS.accent}, {samples: history.up, color: COLORS.up}]},
     ].filter(Boolean);
@@ -239,8 +239,8 @@ function hostBody(host, sizes, {withLights, splitLoad}) {
     const body = column(sizes.spacing);
     body.add_actor(gaugeRow(host.snapshot, sizes.gaugeSize));
     body.add_actor(splitLoad
-        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP)
-        : loadStrip(host, sizes.innerWidth, sizes.graphHeight));
+        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP, sizes.historyLabel)
+        : loadStrip(host, sizes.innerWidth, sizes.graphHeight, sizes.historyLabel));
     if (withLights)
         body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans.length > 1 ? host.snapshot.fans : []));
     if (host.offline)

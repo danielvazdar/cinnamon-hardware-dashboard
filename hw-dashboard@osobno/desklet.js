@@ -28,7 +28,7 @@ const HEADER_LINE_FACTOR = 2.0;
 const LIGHT_ROWS_RESERVED = 2;
 const MAIN_GRAPH_HEIGHT = 64;
 const CARD_GRAPH_HEIGHT = 40;
-const HISTORY_SECONDS = 600;
+const HISTORY_SECONDS = 1800;
 
 function nowClock() {
     return GLib.DateTime.new_now_local().format('%H:%M');
@@ -118,6 +118,15 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
         });
     }
 
+    // Glances' own recent history, so the graphs are full right after the widget starts.
+    async _loadHistory(host) {
+        const plugins = ['cpu', 'gpu', 'network'];
+        const answers = await Promise.all(plugins.map(plugin => this._getJson(`${host.url}/api/4/${plugin}/history/${host.capacity * 3}`)));
+        const [cpu, gpu, network] = answers;
+        const step = Math.max(1, Math.round(this.refreshSeconds / Metrics.samplingSeconds(cpu.user)));
+        return Metrics.historyFromGlances({cpu, gpu, network}, step, host.capacity);
+    }
+
     async _fetchPlugins(host, plugins) {
         const answers = await Promise.all(plugins.map(plugin => this._getJson(`${host.url}/api/4/${plugin}`)));
         return Object.fromEntries(plugins.map((plugin, index) => [plugin, answers[index]]));
@@ -149,13 +158,17 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
                 ? {...host.slowAnswers, ...await this._fetchPlugins(host, SLOW_PLUGINS)} : host.slowAnswers;
             const fast = await this._fetchPlugins(host, FAST_PLUGINS);
             const snapshot = Metrics.snapshotFrom({...slowAnswers, ...fast});
+            const history = host.history.cpu.length ? host.history : await this._loadHistory(host).catch(error => {
+                global.logWarning(`${UUID}: ${host.name}: no history to start the graphs with: ${error.message}`);
+                return host.history;
+            });
             const append = (samples, value) => Metrics.appendSample(samples, value || 0, host.capacity);
             return {...host, snapshot, slowAnswers, failures: 0, offline: false, lastSeen: nowClock(), error: null,
                 history: {
-                    cpu: append(host.history.cpu, snapshot.cpuPercent),
-                    gpu: append(host.history.gpu, snapshot.gpu ? snapshot.gpu.percent : 0),
-                    down: append(host.history.down, snapshot.network.down),
-                    up: append(host.history.up, snapshot.network.up),
+                    cpu: append(history.cpu, snapshot.cpuPercent),
+                    gpu: append(history.gpu, snapshot.gpu ? snapshot.gpu.percent : 0),
+                    down: append(history.down, snapshot.network.down),
+                    up: append(history.up, snapshot.network.up),
                 }};
         } catch (error) {
             const failures = host.failures + 1;
@@ -183,9 +196,10 @@ class HardwareDashboardDesklet extends Desklet.Desklet {
         const underGauge = 2 * line + 6;
         const stripHeader = line + 6;
         const lights = LIGHT_ROWS_RESERVED * (line + 6);
-        const main = {width: contentWidth, height: mainHeight, innerWidth: contentWidth - 2 * PANEL_INSET, spacing: 12,
+        const historyLabel = `${HISTORY_SECONDS / 60} min`;
+        const main = {historyLabel, width: contentWidth, height: mainHeight, innerWidth: contentWidth - 2 * PANEL_INSET, spacing: 12,
             graphHeight: MAIN_GRAPH_HEIGHT};
-        const card = {width: cardWidth, height: cardHeight, innerWidth: cardWidth - 2 * PANEL_INSET, spacing: 10,
+        const card = {historyLabel, width: cardWidth, height: cardHeight, innerWidth: cardWidth - 2 * PANEL_INSET, spacing: 10,
             graphHeight: CARD_GRAPH_HEIGHT};
         main.gaugeSize = clamp(mainHeight - 2 * PANEL_INSET - header - 2 * main.spacing - underGauge - stripHeader
             - main.graphHeight, 60, 150);

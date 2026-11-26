@@ -122,3 +122,29 @@ test('disks are judged by free space, not percent', () => {
     const snapshot = metrics.snapshotFrom({...ANSWERS, amps: [], fs: [{mnt_point: '/', fs_type: 'ext4', percent: 85, used: 23e9, size: 27e9}]});
     assert.deepEqual(snapshot.warnings.map(w => `${w.severity}: ${w.label}`), ['critical: Disk / 4.0 GB free']);
 });
+
+test('Glances history fills the graphs: cpu = user + system, physical network only, newest kept', () => {
+    const series = values => values.map((value, index) => [`t${index}`, value]);
+    const history = metrics.historyFromGlances({
+        cpu: {user: series([5, 6, 7, 8]), system: series([1, 1, 2, 2])},
+        gpu: {nvidia0_mem: series([50, 50, 50, 50]), nvidia0_proc: series([10, 20, 30, 40])},
+        network: {
+            enp3s0_bytes_recv_rate_per_sec: series([100, 200, 300, 400]),
+            wlp2s0_bytes_recv_rate_per_sec: series([1, 1]),
+            tailscale0_bytes_recv_rate_per_sec: series([9999, 9999, 9999, 9999]),
+            enp3s0_bytes_sent_rate_per_sec: series([10, 20, 30, 40]),
+        },
+    }, 1, 3);
+    assert.deepEqual(history, {cpu: [7, 9, 10], gpu: [20, 30, 40], down: [200, 301, 401], up: [20, 30, 40]});
+});
+
+test('history is thinned to our poll interval, counting back from the newest sample', () => {
+    const history = metrics.historyFromGlances({cpu: {user: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]], system: []}}, 2, 10);
+    assert.deepEqual(history.cpu, [1, 3, 5]);
+    assert.deepEqual(history.gpu, []);
+});
+
+test('Glances sampling interval comes from the history timestamps', () => {
+    assert.equal(metrics.samplingSeconds([['2026-11-26T20:55:05.4+00:00', 1], ['2026-11-26T20:55:07.4+00:00', 2]]), 2);
+    assert.equal(metrics.samplingSeconds([]), 2);
+});
