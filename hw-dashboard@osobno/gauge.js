@@ -1,4 +1,4 @@
-// HUD pieces drawn with Cairo: a 270° ring gauge with tick marks and glow, and a frame with corner brackets.
+// HUD pieces drawn with Cairo: a 270° ring gauge with tick marks and glow, and rounded corner accents.
 
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
@@ -10,8 +10,9 @@ const SWEEP = 1.5 * Math.PI;
 const TICK_COUNT = 30;
 const MAJOR_TICK_EVERY = 5;
 const GLOW_LAYERS = [[10, 0.07], [5, 0.16]];
-const BRACKET_LENGTH = 16;
-const BRACKET_WIDTH = 2;
+const PANEL_RADIUS = 14; // matches .hud-panel border-radius in stylesheet.css
+const ACCENT_TAIL = 12;
+const ACCENT_WIDTH = 2;
 
 function strokeArc(context, centre, radius, fromAngle, toAngle) {
     context.newPath();
@@ -76,38 +77,56 @@ function makeGauge({size, percent, color, markup, valueFontSize}) {
     return holder;
 }
 
-function paintBrackets(area, color) {
+// A rounded accent over each corner of the panel, following its border radius.
+function paintCornerAccents(area, color) {
     const context = area.get_context();
     const [width, height] = area.get_surface_size();
     const [red, green, blue] = hexToRgb(color);
-    const edge = BRACKET_WIDTH / 2;
+    const inset = ACCENT_WIDTH / 2;
+    const radius = PANEL_RADIUS - inset;
+    // [arc centre x, arc centre y, start angle, x direction of the tails, y direction of the tails]
     const corners = [
-        [[edge, BRACKET_LENGTH], [edge, edge], [BRACKET_LENGTH, edge]],
-        [[width - BRACKET_LENGTH, edge], [width - edge, edge], [width - edge, BRACKET_LENGTH]],
-        [[edge, height - BRACKET_LENGTH], [edge, height - edge], [BRACKET_LENGTH, height - edge]],
-        [[width - BRACKET_LENGTH, height - edge], [width - edge, height - edge], [width - edge, height - BRACKET_LENGTH]],
+        [inset + radius, inset + radius, Math.PI, 1, 1],
+        [width - inset - radius, inset + radius, 1.5 * Math.PI, -1, 1],
+        [width - inset - radius, height - inset - radius, 0, -1, -1],
+        [inset + radius, height - inset - radius, 0.5 * Math.PI, 1, -1],
     ];
     context.setSourceRGBA(red, green, blue, 0.9);
-    context.setLineWidth(BRACKET_WIDTH);
-    for (const [start, corner, end] of corners) {
+    context.setLineWidth(ACCENT_WIDTH);
+    context.setLineCap(Cairo.LineCap.ROUND);
+    for (const [centreX, centreY, startAngle, directionX, directionY] of corners) {
+        const startX = centreX + Math.cos(startAngle) * radius;
+        const startY = centreY + Math.sin(startAngle) * radius;
+        const endAngle = startAngle + Math.PI / 2;
+        const endX = centreX + Math.cos(endAngle) * radius;
+        const endY = centreY + Math.sin(endAngle) * radius;
         context.newPath();
-        context.moveTo(...start);
-        context.lineTo(...corner);
-        context.lineTo(...end);
+        // tails run along the vertical and horizontal edges away from the corner
+        const verticalTail = [startX, startY + directionY * ACCENT_TAIL];
+        const horizontalTail = [endX + directionX * ACCENT_TAIL, endY];
+        if (startAngle === Math.PI || startAngle === 0) {
+            context.moveTo(...verticalTail);
+            context.arc(centreX, centreY, radius, startAngle, endAngle);
+            context.lineTo(...horizontalTail);
+        } else {
+            context.moveTo(endX, endY + directionY * ACCENT_TAIL);
+            context.arcNegative(centreX, centreY, radius, endAngle, startAngle);
+            context.lineTo(startX + directionX * ACCENT_TAIL, startY);
+        }
         context.stroke();
     }
     context.$dispose();
 }
 
-// Wraps a panel in a fixed-size holder and draws HUD corner brackets over its corners.
+// Wraps a panel in a fixed-size holder and draws rounded corner accents in the machine's state colour.
 function framed(content, {width, height, color}) {
     const holder = new St.Widget({layout_manager: new Clutter.BinLayout(), style: `width: ${width}px; height: ${height}px;`});
     content.x_expand = true;
     content.y_expand = true;
-    const brackets = new St.DrawingArea({x_expand: true, y_expand: true});
-    brackets.connect('repaint', () => paintBrackets(brackets, color));
+    const accents = new St.DrawingArea({x_expand: true, y_expand: true});
+    accents.connect('repaint', () => paintCornerAccents(accents, color));
     holder.add_child(content);
-    holder.add_child(brackets);
+    holder.add_child(accents);
     return holder;
 }
 

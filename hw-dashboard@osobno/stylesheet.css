@@ -3,7 +3,7 @@
 
 .hw-root {
     font-family: "JetBrains Mono", monospace;
-    border-radius: 6px;
+    border-radius: 22px;
     border: 1px solid rgba(0, 229, 255, 0.22);
     background-gradient-direction: vertical;
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
@@ -12,6 +12,7 @@
 
 .hud-panel {
     padding: 16px;
+    border-radius: 14px;
     border: 1px solid rgba(0, 229, 255, 0.10);
     background-color: rgba(0, 229, 255, 0.025);
 }
@@ -25,4 +26,4 @@
 .hud-detail { font-size: 0.95em; color: #e6f7ff; }
 .hud-gauge-value { font-weight: 800; color: #ffffff; }
 
-.hw-graph { background-color: rgba(0, 20, 30, 0.40); }
+.hw-graph { background-color: rgba(0, 20, 30, 0.40); border-radius: 8px; }

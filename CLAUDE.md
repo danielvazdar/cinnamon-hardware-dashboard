@@ -21,6 +21,8 @@ service checks live in `hosts/` (git-ignored). **Deployment notes: `hosts/NOTES.
 - Reload: `gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet 'hw-dashboard@osobno' 'DESKLET'`
 - Glances on a machine: `systemctl --user status glances-dashboard`; API `curl http://<bind>:61208/api/4/cpu`
 - Logs: `~/.xsession-errors` (grep `hw-dashboard`, `St-CRITICAL`)
+- After editing `stylesheet.css`: ReloadXlet is NOT enough (St keeps the parsed sheet). Run Eval
+  `imports.ui.main.themeManager._changeTheme()` then reload.
 
 ## Hard constraints
 - Same St quirks as the calendar desklet (content-box sizes, no CSS opacity, `box.add(actor, props)`

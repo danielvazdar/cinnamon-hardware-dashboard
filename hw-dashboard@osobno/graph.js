@@ -13,6 +13,7 @@ const GLOW_ALPHA = 0.12;
 const FILL_TOP_ALPHA = 0.32;
 const FILL_BOTTOM_ALPHA = 0.02;
 const AUTO_SCALE_HEADROOM = 1.15;
+const CORNER_RADIUS = 8; // matches .hw-graph border-radius in stylesheet.css
 
 function hexToRgb(hex) {
     const value = parseInt(hex.replace('#', ''), 16);
@@ -36,6 +37,7 @@ function scaleTop(series, maximum) {
 function paint(area, series, capacity, maximum) {
     const context = area.get_context();
     const [width, height] = area.get_surface_size();
+    clipToRoundedRectangle(context, width, height, CORNER_RADIUS);
     drawGrid(context, width, height);
     const top = scaleTop(series, maximum);
     const step = width / Math.max(capacity - 1, 1);
@@ -48,6 +50,16 @@ function paint(area, series, capacity, maximum) {
         drawLine(context, points, height, hexToRgb(line.color));
     }
     context.$dispose();
+}
+
+function clipToRoundedRectangle(context, width, height, radius) {
+    context.newPath();
+    context.arc(width - radius, radius, radius, -Math.PI / 2, 0);
+    context.arc(width - radius, height - radius, radius, 0, Math.PI / 2);
+    context.arc(radius, height - radius, radius, Math.PI / 2, Math.PI);
+    context.arc(radius, radius, radius, Math.PI, 1.5 * Math.PI);
+    context.closePath();
+    context.clip();
 }
 
 function drawGrid(context, width, height) {

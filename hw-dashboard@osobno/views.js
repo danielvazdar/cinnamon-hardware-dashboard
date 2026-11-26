@@ -16,6 +16,7 @@ const SEVERITY_COLORS = {ok: COLORS.accent, warn: COLORS.warn, critical: COLORS.
 const NEVER_WARN = {warn: Infinity, critical: Infinity}; // a busy GPU is not a problem
 const OFFLINE_OPACITY = 110;
 const LIGHTS_PER_ROW = 3;
+const GRAPH_GAP = 18;
 const CENTERED = {y_fill: false, y_align: St.Align.MIDDLE};
 const CENTERED_X = {x_fill: false, x_align: St.Align.MIDDLE};
 const EXPAND = {expand: true};
@@ -146,14 +147,38 @@ function loadStrip(host, width, graphHeight) {
         series.push({samples: host.history.gpu, color: COLORS.gpu});
         legends.push([legend('gpu', COLORS.gpu)]);
     }
-    const network = coloredLine([
-        {text: `↓ ${Metrics.formatBytes(snapshot.network.down, '/s')}`, color: COLORS.accent},
-        {text: `↑ ${Metrics.formatBytes(snapshot.network.up, '/s')}`, color: COLORS.up},
-    ], 'hud-detail', 14);
     const strip = column(6);
-    strip.add_actor(row(14, [[caption('load · 10 min')], ...legends, spacer(), [network]]));
+    strip.add_actor(row(14, [[caption('load · 10 min')], ...legends, spacer(), [networkRates(snapshot.network)]]));
     strip.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100, series}));
     return strip;
+}
+
+function networkRates(network) {
+    return coloredLine([
+        {text: `↓ ${Metrics.formatBytes(network.down, '/s')}`, color: COLORS.accent},
+        {text: `↑ ${Metrics.formatBytes(network.up, '/s')}`, color: COLORS.up},
+    ], 'hud-detail', 14);
+}
+
+// One graph with its own caption line: "CPU ............ 10 MIN".
+function graphColumn({name, rightSide, width, graphHeight, capacity, maximum, series}) {
+    const box = column(6);
+    box.add_actor(row(10, [[caption(name)], spacer(), [rightSide]]));
+    box.add_actor(makeGraph({width, height: graphHeight, capacity, maximum, series}));
+    return box;
+}
+
+// The big panel's graphs side by side: CPU, GPU (if any) and network, each on its own scale.
+function splitGraphs(host, width, graphHeight, gap) {
+    const {snapshot, history, capacity} = host;
+    const graphs = [
+        {name: 'cpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
+        snapshot.gpu && {name: 'gpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
+        {name: 'network', rightSide: networkRates(snapshot.network), maximum: null,
+            series: [{samples: history.down, color: COLORS.accent}, {samples: history.up, color: COLORS.up}]},
+    ].filter(Boolean);
+    const columnWidth = Math.floor((width - gap * (graphs.length - 1)) / graphs.length);
+    return row(gap, graphs.map(graph => [graphColumn({...graph, width: columnWidth, graphHeight, capacity})]));
 }
 
 function statusLight(service) {
@@ -178,11 +203,13 @@ function waitingBody(host) {
     return label(escape(host.error ? `no answer: ${host.error}` : 'waiting for the first answer'), 'hud-detail', {ellipsize: true});
 }
 
-// The panel body shared by the big panel and the cards.
-function hostBody(host, sizes, {withLights}) {
+// The panel body shared by the big panel (graphs side by side) and the cards (one combined graph).
+function hostBody(host, sizes, {withLights, splitLoad}) {
     const body = column(sizes.spacing);
     body.add_actor(gaugeRow(host.snapshot, sizes.gaugeSize));
-    body.add_actor(loadStrip(host, sizes.innerWidth, sizes.graphHeight));
+    body.add_actor(splitLoad
+        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP)
+        : loadStrip(host, sizes.innerWidth, sizes.graphHeight));
     if (withLights)
         body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans));
     if (host.offline)
@@ -190,22 +217,22 @@ function hostBody(host, sizes, {withLights}) {
     return body;
 }
 
-function buildPanel(host, sizes, {styleClass, titleClass, withLights}) {
+function buildPanel(host, sizes, {styleClass, titleClass, withLights, splitLoad}) {
     const panel = new St.BoxLayout({vertical: true, style_class: `hud-panel ${styleClass} is-${hostSeverity(host)}`,
         style: `spacing: ${sizes.spacing}px;`});
     panel.add_actor(header(host, titleClass));
-    panel.add(host.snapshot ? hostBody(host, sizes, {withLights}) : waitingBody(host), EXPAND);
+    panel.add(host.snapshot ? hostBody(host, sizes, {withLights, splitLoad}) : waitingBody(host), EXPAND);
     return framed(panel, {width: sizes.width, height: sizes.height, color: frameColor(host)});
 }
 
 // sizes: {width, height (outer), innerWidth, spacing, gaugeSize, graphHeight}
 function buildMainPanel(host, sizes) {
     const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length));
-    return buildPanel(host, sizes, {styleClass: 'hud-main', titleClass: 'hud-title', withLights: hasLights});
+    return buildPanel(host, sizes, {styleClass: 'hud-main', titleClass: 'hud-title', withLights: hasLights, splitLoad: true});
 }
 
 function buildCard(host, sizes) {
-    return buildPanel(host, sizes, {styleClass: 'hud-card', titleClass: 'hud-card-title', withLights: true});
+    return buildPanel(host, sizes, {styleClass: 'hud-card', titleClass: 'hud-card-title', withLights: true, splitLoad: false});
 }
 
 module.exports = {buildMainPanel, buildCard};
