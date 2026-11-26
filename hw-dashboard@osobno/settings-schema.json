@@ -1,0 +1,17 @@
+{
+    "machines-header": {"type": "header", "description": "Machines (the first one gets the big panel)"},
+    "hosts": {
+        "type": "list",
+        "description": "Glances addresses",
+        "columns": [
+            {"id": "name", "title": "Name", "type": "string"},
+            {"id": "url", "title": "Glances address (http://host:61208)", "type": "string"}
+        ],
+        "default": [{"name": "This PC", "url": "http://127.0.0.1:61208"}]
+    },
+    "refresh-seconds": {"type": "spinbutton", "default": 2, "min": 1, "max": 30, "step": 1, "units": "seconds", "description": "Refresh every"},
+    "look-header": {"type": "header", "description": "Look"},
+    "width": {"type": "spinbutton", "default": 1000, "min": 600, "max": 2400, "step": 10, "units": "px", "description": "Width"},
+    "height": {"type": "spinbutton", "default": 680, "min": 400, "max": 1600, "step": 10, "units": "px", "description": "Height"},
+    "glass-opacity": {"type": "scale", "default": 0.65, "min": 0.15, "max": 0.95, "step": 0.05, "description": "Background darkness"}
+}

@@ -1,0 +1,29 @@
+# hw-dashboard
+
+Cinnamon desklet: live hardware dashboard (this PC + servers) fed by Glances. Public repo
+`danielvazdar/cinnamon-hardware-dashboard`. Nothing personal in git: machine names, addresses and
+service checks live in `hosts/` (git-ignored). **Deployment notes: `hosts/NOTES.md`.**
+
+## Map
+| Path | What |
+|---|---|
+| `hw-dashboard@osobno/desklet.js` | settings, polling Glances over HTTP (Soup 3), host state, render |
+| `hw-dashboard@osobno/metrics.js` | pure: Glances JSON → snapshot, limits, warnings, history; tested with Node |
+| `hw-dashboard@osobno/views.js` | St widgets: big panel (first machine) and cards (others) |
+| `hw-dashboard@osobno/graph.js` | Cairo line graphs |
+| `agent/install.sh` | installs pinned Glances in `agent/.venv` as user service `glances-dashboard` (linger, no sudo) |
+| `agent/glances.conf` | default Glances config; copy to `hosts/<machine>.conf` for service checks (AMPs) |
+| `install.sh` | symlinks the desklet into `~/.local/share/cinnamon/desklets/` |
+
+## Commands
+- Tests: `node --test tests/*.test.js && shellcheck install.sh agent/install.sh`
+- Reload: `gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet 'hw-dashboard@osobno' 'DESKLET'`
+- Glances on a machine: `systemctl --user status glances-dashboard`; API `curl http://<bind>:61208/api/4/cpu`
+- Logs: `~/.xsession-errors` (grep `hw-dashboard`, `St-CRITICAL`)
+
+## Hard constraints
+- Same St quirks as the calendar desklet (content-box sizes, no CSS opacity, `box.add(actor, props)`
+  for alignment). Never pass `style: ''` to an St widget: it logs a parser error every render.
+- Glances has no auth here: bind to 127.0.0.1 or a private VPN address only.
+- Keep `GLANCES_VERSION` pinned in `agent/install.sh`; the API shape is version 4.
+- Decisions → `DECISIONS.md`.
