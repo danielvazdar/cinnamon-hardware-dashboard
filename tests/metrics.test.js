@@ -44,7 +44,7 @@ test('a full Glances answer becomes one snapshot', () => {
 
 test('warnings list what needs attention, worst first', () => {
     const labels = metrics.snapshotFrom(ANSWERS).warnings.map(w => `${w.severity}: ${w.label}`);
-    assert.deepEqual(labels, ['critical: Disk / 95%', 'critical: worker down']);
+    assert.deepEqual(labels, ['critical: worker down'], 'a 95% full disk with 13 GB free is fine');
 });
 
 test('services with a minimum are up/down; without one they are counters', () => {
@@ -95,4 +95,62 @@ test('a fan reported twice (readable name + driver name) shows once', () => {
     const fan = (label, value) => ({label, value, type: 'fan_speed', unit: 'R'});
     assert.deepEqual(metrics.fans([fan('CPU Fan', 2100), fan('dell_smm 0', 2100)]), [{label: 'CPU Fan', rpm: 2100}]);
     assert.deepEqual(metrics.fans([fan('nct6798 1', 900)]), [{label: 'nct6798 1', rpm: 900}]);
+});
+
+test('runner checks become a runner list: down, idle or running a job', () => {
+    const amps = [
+        {name: 'Runner-ci-web-1', count: 1, countmin: null},
+        {name: 'Runner-ci-web-2', count: 2, countmin: null},
+        {name: 'Runner-ci-docs', count: 0, countmin: null},
+    ];
+    assert.deepEqual(metrics.services(amps), [
+        {name: 'ci-web-1', kind: 'runner', state: 'idle'},
+        {name: 'ci-web-2', kind: 'runner', state: 'busy'},
+        {name: 'ci-docs', kind: 'runner', state: 'down'},
+    ]);
+    const snapshot = metrics.snapshotFrom({...ANSWERS, fs: [], amps});
+    assert.deepEqual(snapshot.warnings.map(w => w.label), ['runner ci-docs down']);
+});
+
+test('disks are judged by free space, not percent', () => {
+    const disk = (percent, freeGb, sizeGb) => ({mount: '/', percent, sizeBytes: sizeGb * 1e9, usedBytes: (sizeGb - freeGb) * 1e9});
+    assert.equal(metrics.diskSeverity(disk(95, 25.6, 263)), 'ok', 'small partition, full by design');
+    assert.equal(metrics.diskSeverity(disk(97, 60, 2000)), 'ok', 'big disk, plenty left');
+    assert.equal(metrics.diskSeverity(disk(70, 8, 27)), 'warn');
+    assert.equal(metrics.diskSeverity(disk(85, 4, 27)), 'critical');
+    assert.equal(metrics.tightestDisk([disk(95, 25, 263), disk(50, 8, 16)]).sizeBytes, 16e9);
+    const snapshot = metrics.snapshotFrom({...ANSWERS, amps: [], fs: [{mnt_point: '/', fs_type: 'ext4', percent: 85, used: 23e9, size: 27e9}]});
+    assert.deepEqual(snapshot.warnings.map(w => `${w.severity}: ${w.label}`), ['critical: Disk / 4.0 GB free']);
+});
+
+test('Glances history fills the graphs: cpu = user + system, physical network only, newest kept', () => {
+    const series = values => values.map((value, index) => [`t${index}`, value]);
+    const history = metrics.historyFromGlances({
+        cpu: {user: series([5, 6, 7, 8]), system: series([1, 1, 2, 2])},
+        gpu: {nvidia0_mem: series([50, 50, 50, 50]), nvidia0_proc: series([10, 20, 30, 40])},
+        network: {
+            enp3s0_bytes_recv_rate_per_sec: series([100, 200, 300, 400]),
+            wlp2s0_bytes_recv_rate_per_sec: series([1, 1]),
+            tailscale0_bytes_recv_rate_per_sec: series([9999, 9999, 9999, 9999]),
+            enp3s0_bytes_sent_rate_per_sec: series([10, 20, 30, 40]),
+        },
+    }, 1, 3);
+    assert.deepEqual(history, {cpu: [7, 9, 10], gpu: [20, 30, 40], down: [200, 301, 401], up: [20, 30, 40]});
+});
+
+test('history is thinned to our poll interval, counting back from the newest sample', () => {
+    const history = metrics.historyFromGlances({cpu: {user: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]], system: []}}, 2, 10);
+    assert.deepEqual(history.cpu, [1, 3, 5]);
+    assert.deepEqual(history.gpu, []);
+});
+
+test('Glances sampling interval comes from the history timestamps', () => {
+    assert.equal(metrics.samplingSeconds([['2026-11-26T20:55:05.4+00:00', 1], ['2026-11-26T20:55:07.4+00:00', 2]]), 2);
+    assert.equal(metrics.samplingSeconds([]), 2);
+});
+
+test('the process list is refreshed whenever service and runner checks are read', () => {
+    // Glances only refreshes what is asked for; without processcount the checks freeze at their first count.
+    assert.ok(metrics.PLUGINS.slow.includes('amps'));
+    assert.ok(metrics.PLUGINS.slow.includes('processcount') || metrics.PLUGINS.fast.includes('processcount'));
 });

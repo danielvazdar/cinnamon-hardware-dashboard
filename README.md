@@ -11,7 +11,8 @@ The numbers come from [Glances](https://github.com/nicolargo/glances) (open sour
 machine as a small user service.
 
 - The first machine in the list gets the big panel; every other machine gets a card.
-- Limits (warn / critical): CPU, RAM and disk 85 / 95 %, CPU 80 / 90 °C, GPU 80 / 87 °C.
+- Limits (warn / critical): CPU and RAM 85 / 95 %, CPU 80 / 90 °C, GPU 80 / 87 °C, disk free space
+  under 10 / 5 GB (by free space, not percent: a small partition can be full by design).
 
 Tested on Cinnamon 6.6 with Glances 4.5.
 
@@ -54,6 +55,17 @@ countmin=1        # with a minimum: a green or red dot
 enable=true
 regex=Runner\.Worker
 refresh=5         # no minimum: shows the count, e.g. "ci-jobs 2"
+```
+
+**CI runners:** name a check `runner-<name>` and match the runner's `Runner.Listener` and
+`Runner.Worker`. The card then lists runners as up/down and names the ones running a job right now
+(the worker only exists during a job):
+
+```ini
+[amp_runner-web-1]
+enable=true
+regex=^/home/runner/web-1/bin/Runner\.(Listener|Worker)
+refresh=5
 ```
 
 Run `agent/install.sh` again with `--config hosts/<machine>.conf` after a change.

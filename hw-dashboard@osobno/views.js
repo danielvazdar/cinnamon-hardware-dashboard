@@ -16,6 +16,7 @@ const SEVERITY_COLORS = {ok: COLORS.accent, warn: COLORS.warn, critical: COLORS.
 const NEVER_WARN = {warn: Infinity, critical: Infinity}; // a busy GPU is not a problem
 const OFFLINE_OPACITY = 110;
 const LIGHTS_PER_ROW = 3;
+const RUNNERS_PER_ROW = 4;
 const GRAPH_GAP = 18;
 const CENTERED = {y_fill: false, y_align: St.Align.MIDDLE};
 const CENTERED_X = {x_fill: false, x_align: St.Align.MIDDLE};
@@ -101,8 +102,9 @@ function temperaturePart(value, limits) {
 }
 
 // One gauge with its name and a detail line under it. detail: [{text, color}]
-function gaugeBlock({name, percent, limits, detail, size, color = COLORS.accent}) {
-    const severity = Metrics.severityOf(percent, limits);
+// The ring turns amber/red by `severity` when given, else by comparing `percent` with `limits`.
+function gaugeBlock({name, percent, limits, severity: givenSeverity, detail, size, color = COLORS.accent}) {
+    const severity = givenSeverity || Metrics.severityOf(percent, limits);
     const block = column(3);
     block.add(makeGauge({size, percent, color: severity === 'ok' ? color : SEVERITY_COLORS[severity],
         markup: `${Math.round(percent)}<span size="small" fgalpha="60%">%</span>`,
@@ -112,22 +114,19 @@ function gaugeBlock({name, percent, limits, detail, size, color = COLORS.accent}
     return block;
 }
 
-function fullestDisk(disks) {
-    return disks.reduce((fullest, disk) => (!fullest || disk.percent > fullest.percent ? disk : fullest), null);
-}
-
 function gaugeRow(snapshot, size) {
-    const disk = fullestDisk(snapshot.disks);
+    const disk = Metrics.tightestDisk(snapshot.disks);
     const gpu = snapshot.gpu;
     const gauges = [
         gaugeBlock({name: 'cpu', percent: snapshot.cpuPercent, limits: Metrics.LIMITS.cpuPercent, size,
-            detail: [temperaturePart(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature)]}),
+            detail: [temperaturePart(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature),
+                {text: snapshot.fans.length === 1 ? `fan ${snapshot.fans[0].rpm} rpm` : ''}]}),
         gpu && gaugeBlock({name: 'gpu', percent: gpu.percent, limits: NEVER_WARN, size, color: COLORS.gpu,
             detail: [temperaturePart(gpu.temperature, Metrics.LIMITS.gpuTemperature),
                 {text: gpu.fanPercent !== null ? `fan ${gpu.fanPercent}%` : ''}]}),
         gaugeBlock({name: 'ram', percent: snapshot.ram.percent, limits: Metrics.LIMITS.ramPercent, size,
             detail: [{text: `${(snapshot.ram.usedBytes / 1e9).toFixed(1)}/${Metrics.formatBytes(snapshot.ram.totalBytes)}`}]}),
-        disk && gaugeBlock({name: `disk ${disk.mount}`, percent: disk.percent, limits: Metrics.LIMITS.diskPercent, size,
+        disk && gaugeBlock({name: `disk ${disk.mount}`, percent: disk.percent, severity: Metrics.diskSeverity(disk), size,
             detail: [{text: `${Metrics.formatBytes(disk.sizeBytes - disk.usedBytes)} free`},
                 temperaturePart(snapshot.nvmeTemperature, Metrics.LIMITS.cpuTemperature)]}),
     ].filter(Boolean);
@@ -139,7 +138,7 @@ function legend(name, color) {
 }
 
 // "LOAD · 10 MIN   ■ CPU ■ GPU      ↓ 1.2 MB/s ↑ 80 KB/s" over a CPU/GPU graph.
-function loadStrip(host, width, graphHeight) {
+function loadStrip(host, width, graphHeight, historyLabel) {
     const snapshot = host.snapshot;
     const series = [{samples: host.history.cpu, color: COLORS.accent}];
     const legends = [[legend('cpu', COLORS.accent)]];
@@ -148,7 +147,7 @@ function loadStrip(host, width, graphHeight) {
         legends.push([legend('gpu', COLORS.gpu)]);
     }
     const strip = column(6);
-    strip.add_actor(row(14, [[caption('load · 10 min')], ...legends, spacer(), [networkRates(snapshot.network)]]));
+    strip.add_actor(row(14, [[caption(`load · ${historyLabel}`)], ...legends, spacer(), [networkRates(snapshot.network)]]));
     strip.add_actor(makeGraph({width, height: graphHeight, capacity: host.capacity, maximum: 100, series}));
     return strip;
 }
@@ -169,11 +168,11 @@ function graphColumn({name, rightSide, width, graphHeight, capacity, maximum, se
 }
 
 // The big panel's graphs side by side: CPU, GPU (if any) and network, each on its own scale.
-function splitGraphs(host, width, graphHeight, gap) {
+function splitGraphs(host, width, graphHeight, gap, historyLabel) {
     const {snapshot, history, capacity} = host;
     const graphs = [
-        {name: 'cpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
-        snapshot.gpu && {name: 'gpu', rightSide: caption('10 min'), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
+        {name: 'cpu', rightSide: caption(historyLabel), maximum: 100, series: [{samples: history.cpu, color: COLORS.accent}]},
+        snapshot.gpu && {name: 'gpu', rightSide: caption(historyLabel), maximum: 100, series: [{samples: history.gpu, color: COLORS.gpu}]},
         {name: 'network', rightSide: networkRates(snapshot.network), maximum: null,
             series: [{samples: history.down, color: COLORS.accent}, {samples: history.up, color: COLORS.up}]},
     ].filter(Boolean);
@@ -188,14 +187,46 @@ function statusLight(service) {
         [label(escape(service.name.toUpperCase()), 'hud-detail')]]);
 }
 
+// Runner names without the prefix they all share ("ci-evemos-1", "ci-kyuro" -> "evemos-1", "kyuro").
+function shortRunnerNames(runners) {
+    const names = runners.map(runner => runner.name);
+    const shared = names.length > 1 && names.every(name => name.startsWith(names[0].split('-')[0] + '-'))
+        ? names[0].split('-')[0].length + 1 : 0;
+    return runners.map(runner => ({...runner, shortName: runner.name.slice(shared).toUpperCase()}));
+}
+
+// "RUNNERS 10/10 UP" (down ones in red), then "RUNNING ▶ EVEMOS-1 ▶ KYURO" or "no jobs".
+function runnersBlock(runners) {
+    const named = shortRunnerNames(runners);
+    const down = named.filter(runner => runner.state === 'down');
+    const busy = named.filter(runner => runner.state === 'busy');
+    const box = column(6);
+    box.add_actor(coloredLine([
+        {text: 'RUNNERS'},
+        {text: `${runners.length - down.length}/${runners.length} UP`, color: down.length ? COLORS.critical : COLORS.ok},
+        ...down.map(runner => ({text: `${runner.shortName} DOWN`, color: COLORS.critical})),
+    ], 'hud-detail', 10));
+    const running = busy.length
+        ? busy.map(runner => ({text: `▶ ${runner.shortName}`, color: COLORS.accent}))
+        : [{text: 'no jobs', color: COLORS.offline}];
+    for (let index = 0; index < running.length; index += RUNNERS_PER_ROW) {
+        const lead = index === 0 ? [{text: 'RUNNING'}] : [{text: '       '}];
+        box.add_actor(coloredLine([...lead, ...running.slice(index, index + RUNNERS_PER_ROW)], 'hud-detail', 10));
+    }
+    return box;
+}
+
 function statusLights(services, fans) {
     const lights = [
-        ...services.map(statusLight),
+        ...services.filter(service => service.kind !== 'runner').map(statusLight),
         ...fans.map(fan => coloredLine([{text: fan.label.toUpperCase()}, {text: `${fan.rpm} rpm`, color: COLORS.accent}], 'hud-detail', 6)),
     ];
     const box = column(6);
     for (let index = 0; index < lights.length; index += LIGHTS_PER_ROW)
         box.add_actor(row(20, lights.slice(index, index + LIGHTS_PER_ROW).map(light => [light])));
+    const runners = services.filter(service => service.kind === 'runner');
+    if (runners.length)
+        box.add_actor(runnersBlock(runners));
     return box;
 }
 
@@ -208,10 +239,10 @@ function hostBody(host, sizes, {withLights, splitLoad}) {
     const body = column(sizes.spacing);
     body.add_actor(gaugeRow(host.snapshot, sizes.gaugeSize));
     body.add_actor(splitLoad
-        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP)
-        : loadStrip(host, sizes.innerWidth, sizes.graphHeight));
+        ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP, sizes.historyLabel)
+        : loadStrip(host, sizes.innerWidth, sizes.graphHeight, sizes.historyLabel));
     if (withLights)
-        body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans));
+        body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans.length > 1 ? host.snapshot.fans : []));
     if (host.offline)
         body.opacity = OFFLINE_OPACITY;
     return body;
@@ -227,7 +258,7 @@ function buildPanel(host, sizes, {styleClass, titleClass, withLights, splitLoad}
 
 // sizes: {width, height (outer), innerWidth, spacing, gaugeSize, graphHeight}
 function buildMainPanel(host, sizes) {
-    const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length));
+    const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length > 1));
     return buildPanel(host, sizes, {styleClass: 'hud-main', titleClass: 'hud-title', withLights: hasLights, splitLoad: true});
 }
 
