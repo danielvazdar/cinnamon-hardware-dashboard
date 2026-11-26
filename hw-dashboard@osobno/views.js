@@ -102,8 +102,9 @@ function temperaturePart(value, limits) {
 }
 
 // One gauge with its name and a detail line under it. detail: [{text, color}]
-function gaugeBlock({name, percent, limits, detail, size, color = COLORS.accent}) {
-    const severity = Metrics.severityOf(percent, limits);
+// The ring turns amber/red by `severity` when given, else by comparing `percent` with `limits`.
+function gaugeBlock({name, percent, limits, severity: givenSeverity, detail, size, color = COLORS.accent}) {
+    const severity = givenSeverity || Metrics.severityOf(percent, limits);
     const block = column(3);
     block.add(makeGauge({size, percent, color: severity === 'ok' ? color : SEVERITY_COLORS[severity],
         markup: `${Math.round(percent)}<span size="small" fgalpha="60%">%</span>`,
@@ -113,12 +114,8 @@ function gaugeBlock({name, percent, limits, detail, size, color = COLORS.accent}
     return block;
 }
 
-function fullestDisk(disks) {
-    return disks.reduce((fullest, disk) => (!fullest || disk.percent > fullest.percent ? disk : fullest), null);
-}
-
 function gaugeRow(snapshot, size) {
-    const disk = fullestDisk(snapshot.disks);
+    const disk = Metrics.tightestDisk(snapshot.disks);
     const gpu = snapshot.gpu;
     const gauges = [
         gaugeBlock({name: 'cpu', percent: snapshot.cpuPercent, limits: Metrics.LIMITS.cpuPercent, size,
@@ -129,7 +126,7 @@ function gaugeRow(snapshot, size) {
                 {text: gpu.fanPercent !== null ? `fan ${gpu.fanPercent}%` : ''}]}),
         gaugeBlock({name: 'ram', percent: snapshot.ram.percent, limits: Metrics.LIMITS.ramPercent, size,
             detail: [{text: `${(snapshot.ram.usedBytes / 1e9).toFixed(1)}/${Metrics.formatBytes(snapshot.ram.totalBytes)}`}]}),
-        disk && gaugeBlock({name: `disk ${disk.mount}`, percent: disk.percent, limits: Metrics.LIMITS.diskPercent, size,
+        disk && gaugeBlock({name: `disk ${disk.mount}`, percent: disk.percent, severity: Metrics.diskSeverity(disk), size,
             detail: [{text: `${Metrics.formatBytes(disk.sizeBytes - disk.usedBytes)} free`},
                 temperaturePart(snapshot.nvmeTemperature, Metrics.LIMITS.cpuTemperature)]}),
     ].filter(Boolean);

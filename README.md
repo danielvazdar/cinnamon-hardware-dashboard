@@ -11,7 +11,8 @@ The numbers come from [Glances](https://github.com/nicolargo/glances) (open sour
 machine as a small user service.
 
 - The first machine in the list gets the big panel; every other machine gets a card.
-- Limits (warn / critical): CPU, RAM and disk 85 / 95 %, CPU 80 / 90 °C, GPU 80 / 87 °C.
+- Limits (warn / critical): CPU and RAM 85 / 95 %, CPU 80 / 90 °C, GPU 80 / 87 °C, disk free space
+  under 10 / 5 GB (by free space, not percent: a small partition can be full by design).
 
 Tested on Cinnamon 6.6 with Glances 4.5.
 

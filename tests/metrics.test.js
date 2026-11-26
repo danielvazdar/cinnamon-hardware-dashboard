@@ -44,7 +44,7 @@ test('a full Glances answer becomes one snapshot', () => {
 
 test('warnings list what needs attention, worst first', () => {
     const labels = metrics.snapshotFrom(ANSWERS).warnings.map(w => `${w.severity}: ${w.label}`);
-    assert.deepEqual(labels, ['critical: Disk / 95%', 'critical: worker down']);
+    assert.deepEqual(labels, ['critical: worker down'], 'a 95% full disk with 13 GB free is fine');
 });
 
 test('services with a minimum are up/down; without one they are counters', () => {
@@ -110,4 +110,15 @@ test('runner checks become a runner list: down, idle or running a job', () => {
     ]);
     const snapshot = metrics.snapshotFrom({...ANSWERS, fs: [], amps});
     assert.deepEqual(snapshot.warnings.map(w => w.label), ['runner ci-docs down']);
+});
+
+test('disks are judged by free space, not percent', () => {
+    const disk = (percent, freeGb, sizeGb) => ({mount: '/', percent, sizeBytes: sizeGb * 1e9, usedBytes: (sizeGb - freeGb) * 1e9});
+    assert.equal(metrics.diskSeverity(disk(95, 25.6, 263)), 'ok', 'small partition, full by design');
+    assert.equal(metrics.diskSeverity(disk(97, 60, 2000)), 'ok', 'big disk, plenty left');
+    assert.equal(metrics.diskSeverity(disk(70, 8, 27)), 'warn');
+    assert.equal(metrics.diskSeverity(disk(85, 4, 27)), 'critical');
+    assert.equal(metrics.tightestDisk([disk(95, 25, 263), disk(50, 8, 16)]).sizeBytes, 16e9);
+    const snapshot = metrics.snapshotFrom({...ANSWERS, amps: [], fs: [{mnt_point: '/', fs_type: 'ext4', percent: 85, used: 23e9, size: 27e9}]});
+    assert.deepEqual(snapshot.warnings.map(w => `${w.severity}: ${w.label}`), ['critical: Disk / 4.0 GB free']);
 });

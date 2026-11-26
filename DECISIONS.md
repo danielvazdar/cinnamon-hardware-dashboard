@@ -16,3 +16,4 @@
 | 2026-11-26 | Rounded corners (frame 22 px, panels 14 px, graphs 8 px) with curved corner accents | Owner prefers rounded, like the calendar, over sharp HUD brackets |
 | 2026-11-26 | CI runners: one check per runner named `runner-<name>`, counting its Listener + Worker (0 down, 1 idle, 2+ running a job); the card shows "N/N up" and which are running | Owner wants to see which runners run; one check per runner gives all three states |
 | 2026-11-26 | A machine with exactly one fan shows it under the CPU gauge | Frees a line in the card for the runner list |
+| 2026-11-26 | Disk warnings by free space (warn < 10 GB, critical < 5 GB), not percent | Owner: the PC's Linux partition is 95% full by design (Windows has the rest of the disk), 25 GB free is plenty |

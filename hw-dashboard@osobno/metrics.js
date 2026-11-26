@@ -4,7 +4,9 @@
 const LIMITS = {
     cpuPercent: {warn: 85, critical: 95},
     ramPercent: {warn: 85, critical: 95},
-    diskPercent: {warn: 85, critical: 95},
+    // Disks are judged by free space, not percent: a small partition can be 95% full by design,
+    // and a big disk at 95% still has plenty left.
+    diskFreeGigabytes: {warn: 10, critical: 5},
     cpuTemperature: {warn: 80, critical: 90},
     gpuTemperature: {warn: 80, critical: 87},
 };
@@ -132,6 +134,22 @@ function formatBytes(bytes, suffix = '') {
     return `${value.toFixed(digits)} ${units[unit]}${suffix}`;
 }
 
+function freeGigabytes(disk) {
+    return (disk.sizeBytes - disk.usedBytes) / 1e9;
+}
+
+function diskSeverity(disk) {
+    const free = freeGigabytes(disk);
+    if (free < LIMITS.diskFreeGigabytes.critical)
+        return 'critical';
+    return free < LIMITS.diskFreeGigabytes.warn ? 'warn' : 'ok';
+}
+
+// The disk closest to running out of space.
+function tightestDisk(disks) {
+    return disks.reduce((tightest, disk) => (!tightest || freeGigabytes(disk) < freeGigabytes(tightest) ? disk : tightest), null);
+}
+
 // Everything that is not "ok", worst first, as short labels for the card header.
 function warnings(snapshot) {
     const found = [];
@@ -145,7 +163,7 @@ function warnings(snapshot) {
     if (snapshot.gpu)
         add(`GPU ${snapshot.gpu.temperature}°C`, severityOf(snapshot.gpu.temperature, LIMITS.gpuTemperature));
     for (const disk of snapshot.disks)
-        add(`Disk ${disk.mount} ${Math.round(disk.percent)}%`, severityOf(disk.percent, LIMITS.diskPercent));
+        add(`Disk ${disk.mount} ${freeGigabytes(disk).toFixed(1)} GB free`, diskSeverity(disk));
     for (const service of snapshot.services.filter(s => s.kind === 'service' && !s.up))
         add(`${service.name} down`, 'critical');
     for (const runner of snapshot.services.filter(s => s.kind === 'runner' && s.state === 'down'))
@@ -180,5 +198,5 @@ function appendSample(samples, value, capacity = HISTORY_SAMPLES) {
     return next.length > capacity ? next.slice(next.length - capacity) : next;
 }
 
-module.exports = {LIMITS, severityOf, worstSeverity, cpuTemperature, nvmeTemperature, fans, gpu, disks,
+module.exports = {LIMITS, severityOf, diskSeverity, tightestDisk, worstSeverity, cpuTemperature, nvmeTemperature, fans, gpu, disks,
     networkRates, services, uptimeSeconds, formatUptime, formatBytes, warnings, snapshotFrom, appendSample};
