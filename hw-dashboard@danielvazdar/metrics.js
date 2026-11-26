@@ -60,11 +60,16 @@ function nvmeTemperature(sensors) {
     return nvme ? nvme.value : null;
 }
 
-// Fans by their readable names; driver-named duplicates are dropped when a readable one exists.
+// Fans by their readable names. Driver-named readings ("nct6799 1") are duplicates when a readable one
+// exists; otherwise they become "Fan 2", and the ones at 0 rpm are empty connectors and are dropped.
 function fans(sensors) {
     const all = sensors.filter(sensor => sensor.type === 'fan_speed');
     const readable = all.filter(sensor => !DRIVER_NAMED_SENSOR.test(sensor.label));
-    return (readable.length ? readable : all).map(sensor => ({label: sensor.label, rpm: sensor.value}));
+    if (readable.length)
+        return readable.map(sensor => ({label: sensor.label, rpm: sensor.value}));
+    return all.filter(sensor => sensor.value > 0).map(sensor => ({
+        label: `Fan ${Number(sensor.label.split(' ').pop()) + 1}`, rpm: sensor.value,
+    }));
 }
 
 // The first GPU that reports real numbers (integrated GPUs often report only nulls).
