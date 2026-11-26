@@ -96,3 +96,18 @@ test('a fan reported twice (readable name + driver name) shows once', () => {
     assert.deepEqual(metrics.fans([fan('CPU Fan', 2100), fan('dell_smm 0', 2100)]), [{label: 'CPU Fan', rpm: 2100}]);
     assert.deepEqual(metrics.fans([fan('nct6798 1', 900)]), [{label: 'nct6798 1', rpm: 900}]);
 });
+
+test('runner checks become a runner list: down, idle or running a job', () => {
+    const amps = [
+        {name: 'Runner-ci-web-1', count: 1, countmin: null},
+        {name: 'Runner-ci-web-2', count: 2, countmin: null},
+        {name: 'Runner-ci-docs', count: 0, countmin: null},
+    ];
+    assert.deepEqual(metrics.services(amps), [
+        {name: 'ci-web-1', kind: 'runner', state: 'idle'},
+        {name: 'ci-web-2', kind: 'runner', state: 'busy'},
+        {name: 'ci-docs', kind: 'runner', state: 'down'},
+    ]);
+    const snapshot = metrics.snapshotFrom({...ANSWERS, fs: [], amps});
+    assert.deepEqual(snapshot.warnings.map(w => w.label), ['runner ci-docs down']);
+});

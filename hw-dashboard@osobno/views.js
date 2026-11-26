@@ -16,6 +16,7 @@ const SEVERITY_COLORS = {ok: COLORS.accent, warn: COLORS.warn, critical: COLORS.
 const NEVER_WARN = {warn: Infinity, critical: Infinity}; // a busy GPU is not a problem
 const OFFLINE_OPACITY = 110;
 const LIGHTS_PER_ROW = 3;
+const RUNNERS_PER_ROW = 4;
 const GRAPH_GAP = 18;
 const CENTERED = {y_fill: false, y_align: St.Align.MIDDLE};
 const CENTERED_X = {x_fill: false, x_align: St.Align.MIDDLE};
@@ -121,7 +122,8 @@ function gaugeRow(snapshot, size) {
     const gpu = snapshot.gpu;
     const gauges = [
         gaugeBlock({name: 'cpu', percent: snapshot.cpuPercent, limits: Metrics.LIMITS.cpuPercent, size,
-            detail: [temperaturePart(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature)]}),
+            detail: [temperaturePart(snapshot.cpuTemperature, Metrics.LIMITS.cpuTemperature),
+                {text: snapshot.fans.length === 1 ? `fan ${snapshot.fans[0].rpm} rpm` : ''}]}),
         gpu && gaugeBlock({name: 'gpu', percent: gpu.percent, limits: NEVER_WARN, size, color: COLORS.gpu,
             detail: [temperaturePart(gpu.temperature, Metrics.LIMITS.gpuTemperature),
                 {text: gpu.fanPercent !== null ? `fan ${gpu.fanPercent}%` : ''}]}),
@@ -188,14 +190,46 @@ function statusLight(service) {
         [label(escape(service.name.toUpperCase()), 'hud-detail')]]);
 }
 
+// Runner names without the prefix they all share ("ci-evemos-1", "ci-kyuro" -> "evemos-1", "kyuro").
+function shortRunnerNames(runners) {
+    const names = runners.map(runner => runner.name);
+    const shared = names.length > 1 && names.every(name => name.startsWith(names[0].split('-')[0] + '-'))
+        ? names[0].split('-')[0].length + 1 : 0;
+    return runners.map(runner => ({...runner, shortName: runner.name.slice(shared).toUpperCase()}));
+}
+
+// "RUNNERS 10/10 UP" (down ones in red), then "RUNNING ▶ EVEMOS-1 ▶ KYURO" or "no jobs".
+function runnersBlock(runners) {
+    const named = shortRunnerNames(runners);
+    const down = named.filter(runner => runner.state === 'down');
+    const busy = named.filter(runner => runner.state === 'busy');
+    const box = column(6);
+    box.add_actor(coloredLine([
+        {text: 'RUNNERS'},
+        {text: `${runners.length - down.length}/${runners.length} UP`, color: down.length ? COLORS.critical : COLORS.ok},
+        ...down.map(runner => ({text: `${runner.shortName} DOWN`, color: COLORS.critical})),
+    ], 'hud-detail', 10));
+    const running = busy.length
+        ? busy.map(runner => ({text: `▶ ${runner.shortName}`, color: COLORS.accent}))
+        : [{text: 'no jobs', color: COLORS.offline}];
+    for (let index = 0; index < running.length; index += RUNNERS_PER_ROW) {
+        const lead = index === 0 ? [{text: 'RUNNING'}] : [{text: '       '}];
+        box.add_actor(coloredLine([...lead, ...running.slice(index, index + RUNNERS_PER_ROW)], 'hud-detail', 10));
+    }
+    return box;
+}
+
 function statusLights(services, fans) {
     const lights = [
-        ...services.map(statusLight),
+        ...services.filter(service => service.kind !== 'runner').map(statusLight),
         ...fans.map(fan => coloredLine([{text: fan.label.toUpperCase()}, {text: `${fan.rpm} rpm`, color: COLORS.accent}], 'hud-detail', 6)),
     ];
     const box = column(6);
     for (let index = 0; index < lights.length; index += LIGHTS_PER_ROW)
         box.add_actor(row(20, lights.slice(index, index + LIGHTS_PER_ROW).map(light => [light])));
+    const runners = services.filter(service => service.kind === 'runner');
+    if (runners.length)
+        box.add_actor(runnersBlock(runners));
     return box;
 }
 
@@ -211,7 +245,7 @@ function hostBody(host, sizes, {withLights, splitLoad}) {
         ? splitGraphs(host, sizes.innerWidth, sizes.graphHeight, GRAPH_GAP)
         : loadStrip(host, sizes.innerWidth, sizes.graphHeight));
     if (withLights)
-        body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans));
+        body.add_actor(statusLights(host.snapshot.services, host.snapshot.fans.length > 1 ? host.snapshot.fans : []));
     if (host.offline)
         body.opacity = OFFLINE_OPACITY;
     return body;
@@ -227,7 +261,7 @@ function buildPanel(host, sizes, {styleClass, titleClass, withLights, splitLoad}
 
 // sizes: {width, height (outer), innerWidth, spacing, gaugeSize, graphHeight}
 function buildMainPanel(host, sizes) {
-    const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length));
+    const hasLights = Boolean(host.snapshot && (host.snapshot.services.length || host.snapshot.fans.length > 1));
     return buildPanel(host, sizes, {styleClass: 'hud-main', titleClass: 'hud-title', withLights: hasLights, splitLoad: true});
 }
 

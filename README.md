@@ -56,6 +56,17 @@ regex=Runner\.Worker
 refresh=5         # no minimum: shows the count, e.g. "ci-jobs 2"
 ```
 
+**CI runners:** name a check `runner-<name>` and match the runner's `Runner.Listener` and
+`Runner.Worker`. The card then lists runners as up/down and names the ones running a job right now
+(the worker only exists during a job):
+
+```ini
+[amp_runner-web-1]
+enable=true
+regex=^/home/runner/web-1/bin/Runner\.(Listener|Worker)
+refresh=5
+```
+
 Run `agent/install.sh` again with `--config hosts/<machine>.conf` after a change.
 
 ## Development

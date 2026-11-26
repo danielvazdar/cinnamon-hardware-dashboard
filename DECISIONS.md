@@ -14,3 +14,5 @@
 | 2026-11-26 | "Text size" setting (default 15 px); gauges take the height left after text | Theme default text was too small to read across the room |
 | 2026-11-26 | Big panel: CPU, GPU and network graphs side by side, each on its own scale; cards keep one combined graph | Owner: one graph with three things in it was hard to read |
 | 2026-11-26 | Rounded corners (frame 22 px, panels 14 px, graphs 8 px) with curved corner accents | Owner prefers rounded, like the calendar, over sharp HUD brackets |
+| 2026-11-26 | CI runners: one check per runner named `runner-<name>`, counting its Listener + Worker (0 down, 1 idle, 2+ running a job); the card shows "N/N up" and which are running | Owner wants to see which runners run; one check per runner gives all three states |
+| 2026-11-26 | A machine with exactly one fan shows it under the CPU gauge | Frees a line in the card for the runner list |

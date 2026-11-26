@@ -78,10 +78,22 @@ function networkRates(interfaces) {
     return {down: sum('bytes_recv_rate_per_sec'), up: sum('bytes_sent_rate_per_sec')};
 }
 
-// Glances AMPs: with a minimum count they are services (up/down), without one they are counters.
+const RUNNER_PREFIX = 'runner-';
+
+// A CI runner check counts its listener (idle) plus a worker process while it runs a job.
+function runnerState(processCount) {
+    if (processCount === 0)
+        return 'down';
+    return processCount === 1 ? 'idle' : 'busy';
+}
+
+// Glances AMPs: names starting with "runner-" are CI runners (down/idle/busy); otherwise, with a
+// minimum count they are services (up/down), without one they are counters.
 function services(amps) {
     return amps.map(amp => {
         const name = amp.name.toLowerCase();
+        if (name.startsWith(RUNNER_PREFIX))
+            return {name: name.slice(RUNNER_PREFIX.length), kind: 'runner', state: runnerState(amp.count)};
         if (amp.countmin === null || amp.countmin === undefined)
             return {name, kind: 'counter', count: amp.count};
         return {name, kind: 'service', count: amp.count, up: amp.count >= amp.countmin};
@@ -136,6 +148,8 @@ function warnings(snapshot) {
         add(`Disk ${disk.mount} ${Math.round(disk.percent)}%`, severityOf(disk.percent, LIMITS.diskPercent));
     for (const service of snapshot.services.filter(s => s.kind === 'service' && !s.up))
         add(`${service.name} down`, 'critical');
+    for (const runner of snapshot.services.filter(s => s.kind === 'runner' && s.state === 'down'))
+        add(`runner ${runner.name} down`, 'critical');
     return found.sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
 }
 
