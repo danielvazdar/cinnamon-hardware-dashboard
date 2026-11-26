@@ -94,7 +94,9 @@ test('history keeps the newest samples and never mutates the old list', () => {
 test('a fan reported twice (readable name + driver name) shows once', () => {
     const fan = (label, value) => ({label, value, type: 'fan_speed', unit: 'R'});
     assert.deepEqual(metrics.fans([fan('CPU Fan', 2100), fan('dell_smm 0', 2100)]), [{label: 'CPU Fan', rpm: 2100}]);
-    assert.deepEqual(metrics.fans([fan('nct6798 1', 900)]), [{label: 'nct6798 1', rpm: 900}]);
+    assert.deepEqual(metrics.fans([fan('nct6799 0', 0), fan('nct6799 1', 1121), fan('nct6799 2', 0)]),
+        [{label: 'Fan 2', rpm: 1121}], 'empty motherboard connectors (0 rpm) are dropped');
+    assert.deepEqual(metrics.fans([fan('CPU Fan', 0)]), [{label: 'CPU Fan', rpm: 0}], 'a named fan at rest still shows');
 });
 
 test('runner checks become a runner list: down, idle or running a job', () => {
