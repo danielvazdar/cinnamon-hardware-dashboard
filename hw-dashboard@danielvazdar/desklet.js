@@ -26,7 +26,7 @@ const HEADER_LINE_FACTOR = 2.0;
 const LIGHT_ROWS_RESERVED = 2;
 const MAIN_GRAPH_HEIGHT = 64;
 const CARD_GRAPH_HEIGHT = 40;
-const HISTORY_SECONDS = 1800;
+const HISTORY_SECONDS = 600;
 
 function nowClock() {
     return GLib.DateTime.new_now_local().format('%H:%M');
