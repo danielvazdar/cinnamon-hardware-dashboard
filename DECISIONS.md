@@ -22,3 +22,4 @@
 | 2026-11-26 | Desklet ID `hw-dashboard@danielvazdar` (was `@osobno`) | The suffix is the author by Cinnamon convention; "osobno" meant nothing outside the owner's folder names |
 | 2026-11-26 | Right-click menu opens at the mouse, clamped to the monitor (overrides the menu's `_calculatePosition`) | Cinnamon only checks for room on the right, then flips left without clamping: a full-width desklet pushed its menu off-screen |
 | 2026-11-26 | Driver-named fans (e.g. `nct6799 1`) show as "Fan N"; at 0 rpm they are hidden as empty connectors; named fans show even at rest | Motherboard chips report every connector; listing empty ones at 0 rpm was noise |
+| 2026-11-27 | Graphs show 10 minutes again (history still starts full from Glances) | Owner: 30 minutes was too long a window; trying 10 to see how it looks |
